@@ -1,0 +1,26 @@
+[server]
+address = "127.0.0.1"
+headless = true
+
+[browser]
+serverAddress = "127.0.0.1"
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#255ED7"
+backgroundColor = "#0B1221"
+secondaryBackgroundColor = "#152239"
+textColor = "#EDF4FF"
+borderColor = "#2B3C58"
+baseRadius = "0.75rem"
+buttonRadius = "0.625rem"
+showWidgetBorder = true
+showSidebarBorder = true
+
+[theme.sidebar]
+backgroundColor = "#0E192C"
+secondaryBackgroundColor = "#192841"

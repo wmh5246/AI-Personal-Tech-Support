@@ -1,0 +1,92 @@
+/* Presentation for the named Streamlit containers, kept separate from app logic. */
+[data-testid="stMainBlockContainer"] {
+    max-width: 72rem;
+    padding-top: 3rem;
+}
+
+.st-key-support-intro {
+    padding: clamp(1.25rem, 4vw, 2.65rem);
+    border: 1px solid #2b4566;
+    border-radius: 1rem;
+    background:
+        radial-gradient(ellipse at 90% 0%, #1c4575 0%, transparent 58%),
+        linear-gradient(120deg, #14243d, #101c31);
+}
+
+.st-key-support-intro h1 {
+    max-width: 18ch;
+    padding: 0;
+    font-size: clamp(2rem, 4.1vw, 3.5rem);
+    line-height: 1.08;
+    letter-spacing: -0.045em;
+    text-wrap: balance;
+}
+
+.st-key-support-intro p {
+    color: #c5d6ef;
+}
+
+.st-key-quick-starts button {
+    min-height: 5.15rem;
+    padding: 0.75rem;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    text-align: left;
+    background: #152239;
+}
+
+.st-key-quick-starts button p {
+    font-weight: 600;
+    white-space: normal;
+}
+
+.st-key-quick-starts button[kind="secondary"] span {
+    color: #83d9ff;
+}
+
+.st-key-quick-starts button[kind="primary"] {
+    background: #183c69;
+    border: 1px solid #81d8ff;
+    color: #f2f8ff;
+}
+
+.st-key-quick-starts button:hover,
+.st-key-quick-starts button:focus-visible {
+    border-color: #81d8ff;
+    color: #f2f8ff;
+}
+
+.st-key-conversation {
+    margin-top: 0.35rem;
+}
+
+.st-key-conversation [data-testid="stChatMessage"] {
+    border: 1px solid #2b3c58;
+    border-radius: 0.75rem;
+    background: #111e33;
+}
+
+.st-key-conversation [data-testid="stText"],
+.st-key-conversation [data-testid="stText"] pre {
+    font: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 1050px) {
+    .st-key-quick-starts [data-testid="stHorizontalBlock"] {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .st-key-quick-starts [data-testid="stColumn"] {
+        width: 100%;
+    }
+}
+
+@media (max-width: 550px) {
+    .st-key-quick-starts [data-testid="stHorizontalBlock"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
