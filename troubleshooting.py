@@ -1,4 +1,8 @@
-"""Quick-start topics and scripted replies for the interface preview."""
+"""Quick-start topics and local behavior for the simulated preview."""
+
+import re
+
+from diagnostic_state import Category
 
 QUICK_STARTS = {
     "internet": {
@@ -27,6 +31,25 @@ QUICK_STARTS = {
         "question": "Does this happen during a particular game or after the PC has been running for a while?",
     },
 }
+
+
+PREVIEW_CATEGORY_HINTS = {
+    "internet": r"wi[ -]?fi|wireless network|internet|router|ethernet",
+    "performance": r"slow(?:er|down)?|sluggish|freez(?:e|es|ing)|takes a long time",
+    "storage": r"storage|disk space|drive (?:is )?full|c: drive",
+    "audio": r"audio|no sound|lost sound|microphone|headphones|speakers?",
+    "gaming": r"overheat(?:s|ing)?|too hot|gaming|(?:low|drops? in) fps",
+}
+
+
+def detect_preview_category(problem: str) -> Category | None:
+    """Give the offline preview a category only when one set of hints matches."""
+    matches = [
+        category
+        for category, hints in PREVIEW_CATEGORY_HINTS.items()
+        if re.search(rf"\b(?:{hints})\b", problem, re.IGNORECASE)
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def placeholder_reply(category: str | None, first_message: bool) -> str:

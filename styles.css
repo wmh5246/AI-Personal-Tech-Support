@@ -67,8 +67,8 @@
     background: #111e33;
 }
 
-.st-key-conversation [data-testid="stText"],
-.st-key-conversation [data-testid="stText"] pre {
+:is(.st-key-conversation, .st-key-session-details) [data-testid="stText"],
+:is(.st-key-conversation, .st-key-session-details) [data-testid="stText"] pre {
     font: inherit;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

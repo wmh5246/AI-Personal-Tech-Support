@@ -10,7 +10,8 @@ except ModuleNotFoundError:
     st.error("A Python package is missing. Install the packages in requirements.txt, then restart the app.")
     st.stop()
 
-from troubleshooting import QUICK_STARTS, placeholder_reply
+from diagnostic_state import Category, DiagnosticMemory, FACT_LABELS, Stage
+from troubleshooting import QUICK_STARTS, detect_preview_category, placeholder_reply
 
 
 MAX_PROBLEM_LENGTH = 2000
@@ -24,10 +25,16 @@ def reset_session() -> None:
     st.session_state.input_error = None
     st.session_state.reply_error = None
     st.session_state.reply_pending = False
+    st.session_state.diagnostics = {"live": DiagnosticMemory(), "preview": DiagnosticMemory()}
 
 
-def select_category(category: str) -> None:
+def select_category(category: Category | None) -> None:
     st.session_state.category = category
+
+
+def current_memory() -> DiagnosticMemory:
+    mode = "preview" if st.session_state.preview_mode else "live"
+    return st.session_state.diagnostics[mode]
 
 
 def submit_problem() -> None:
@@ -40,26 +47,18 @@ def submit_problem() -> None:
     st.session_state.input_error = None
     st.session_state.reply_error = None
     mode = "preview" if st.session_state.preview_mode else "live"
+    memory = current_memory()
+    if memory.original_problem is None:
+        memory.original_problem = problem
     st.session_state.messages.append({"role": "user", "text": problem, "mode": mode})
     st.session_state.reply_pending = True
 
 
-def render_sidebar(settings: AISettings) -> None:
-    category = st.session_state.category
-    if st.session_state.messages:
-        status = "In progress"
-    elif category is not None:
-        status = "Waiting for details"
-    else:
-        status = "Ready to start"
-
+def render_sidebar(settings: AISettings):
     with st.sidebar:
         st.header("Your session", anchor=False)
-        with st.container(key="session-details", border=True):
-            st.caption("Troubleshooting category")
-            st.markdown(QUICK_STARTS[category]["label"] if category else "None selected")
-            st.caption("Session status")
-            st.markdown(f":blue-badge[{status}]")
+        # Reserve the sidebar space so it can reflect the reply from this same run.
+        details = st.container(key="session-details", border=True)
         st.button(
             "New troubleshooting session",
             key="new-session",
@@ -67,10 +66,60 @@ def render_sidebar(settings: AISettings) -> None:
             width="stretch",
             on_click=reset_session,
         )
-        st.caption("Starting a new session clears the current conversation and category.")
+        st.caption("Starting a new session clears the conversation and diagnostic notes.")
 
         st.divider()
         st.toggle("Simulated preview", key="preview_mode", value=not settings.api_key)
+    return details
+
+
+def render_session_details(memory: DiagnosticMemory) -> None:
+    manual_category = st.session_state.category
+    detected_category = memory.detected_category
+    category = manual_category or detected_category
+    if memory.stage == Stage.RESOLVE:
+        status = "Review outcome"
+    elif memory.original_problem is not None:
+        status = "In progress"
+    elif category is not None:
+        status = "Waiting for details"
+    else:
+        status = "Ready to start"
+
+    st.caption("Troubleshooting category")
+    st.markdown(QUICK_STARTS[category]["label"] if category else "None selected")
+    if manual_category:
+        st.caption("Manual selection")
+        if detected_category and detected_category != manual_category:
+            st.caption(f"Auto-detected: {QUICK_STARTS[detected_category]['label']}")
+        st.button("Use automatic category", key="auto-category", on_click=select_category, args=(None,))
+    elif detected_category:
+        st.caption("Auto-detected. Use a quick start to correct it.")
+    elif memory.original_problem is not None:
+        st.caption("The category is still unclear. Describe the symptom or choose a quick start.")
+
+    st.caption("Session status")
+    st.markdown(f":blue-badge[{status}]")
+    st.markdown(f"**{memory.stage.value}**")
+    steps = list(Stage)
+    stage_number = steps.index(memory.stage) + 1
+    st.progress(stage_number / len(steps), text=f"Stage {stage_number} of {len(steps)}")
+
+    with st.expander("Diagnostic notes"):
+        if memory.original_problem is None:
+            st.caption("No diagnostic details recorded yet.")
+            return
+        st.caption("Original problem")
+        st.text(memory.original_problem)
+        notes = [(label, memory.facts.get(kind, [])) for kind, label in FACT_LABELS.items()]
+        notes.extend([
+            ("Possible causes", memory.possible_causes),
+            ("Unresolved questions", memory.unresolved_questions),
+        ])
+        for label, items in notes:
+            if items:
+                st.caption(label)
+                st.text("\n".join(f"• {item}" for item in items))
 
 
 def render_quick_starts() -> None:
@@ -109,18 +158,30 @@ def reply_to_pending_message(settings: AISettings) -> None:
     st.session_state.reply_pending = False
     messages = st.session_state.messages
     mode = messages[-1]["mode"]
+    memory = st.session_state.diagnostics[mode]
     category = st.session_state.category
     if mode == "preview":
         first_message = not any(message["mode"] == "preview" for message in messages[:-1])
-        reply = placeholder_reply(category, first_message=first_message)
+        memory.detected_category = memory.detected_category or detect_preview_category(messages[-1]["text"])
+        category = category or memory.detected_category
+        asking_for_details = first_message or (memory.stage == Stage.IDENTIFY and category is not None)
+        reply = placeholder_reply(category, first_message=asking_for_details)
+        if asking_for_details:
+            memory.stage = Stage.GATHER if category else Stage.IDENTIFY
+            memory.unresolved_questions = [reply]
     else:
         category_label = QUICK_STARTS[category]["label"] if category else None
         try:
             with st.spinner("Waiting for OpenAI…", show_time=True):
-                reply = get_live_reply(settings, messages, category_label)
+                update = get_live_reply(settings, messages, category_label, memory)
         except AIServiceError as error:
             st.session_state.reply_error = str(error)
             return
+        user_reports = [
+            message["text"] for message in messages if message["mode"] == "live" and message["role"] == "user"
+        ]
+        memory.apply(update, user_reports)
+        reply = update.reply.strip()
 
     message = {"role": "assistant", "text": reply, "mode": mode}
     messages.append(message)
@@ -136,7 +197,7 @@ def render_conversation(settings: AISettings) -> None:
             st.caption("Simulated preview · Scripted replies stay on this computer.")
         else:
             st.caption(
-                "Live AI · Sending a message shares your recent live conversation and selected category "
+                "Live AI · Sending a message shares your recent live conversation, diagnostic notes, and selected category "
                 "with OpenAI. Leave out passwords and other sensitive details."
             )
         if live_key_missing:
@@ -176,15 +237,18 @@ def main() -> None:
     st.session_state.setdefault("input_error", None)
     st.session_state.setdefault("reply_error", None)
     st.session_state.setdefault("reply_pending", False)
+    st.session_state.setdefault("diagnostics", {"live": DiagnosticMemory(), "preview": DiagnosticMemory()})
 
     settings = load_ai_settings()
-    render_sidebar(settings)
+    details = render_sidebar(settings)
     with st.container(key="support-intro"):
         st.markdown(":blue-badge[:material/desktop_windows: Windows PC support]")
         st.title("AI Personal Tech Support", anchor=False)
         st.markdown("Describe what’s happening with your PC, or pick a common issue to get started.")
     render_quick_starts()
     render_conversation(settings)
+    with details:
+        render_session_details(current_memory())
 
 
 if __name__ == "__main__":

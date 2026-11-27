@@ -1,5 +1,6 @@
 """Verify API configuration, request limits, and safe errors without network calls."""
 
+import json
 import os
 import unittest
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ from ai_service import (
     get_live_reply,
     load_ai_settings,
 )
+from diagnostic_state import DiagnosticMemory, DiagnosticReply, FACT_LABELS, FactUpdates, Stage
 
 
 class AIServiceTests(unittest.TestCase):
@@ -26,6 +28,7 @@ class AIServiceTests(unittest.TestCase):
         self.create_response = self.client.return_value.__enter__.return_value.responses.create
         self.settings = AISettings(api_key="fixture-value")
         self.history = [{"role": "user", "text": "My Wi-Fi drops.", "mode": "live"}]
+        self.memory = DiagnosticMemory()
 
     def test_reads_local_key_and_allows_model_environment_override(self):
         with patch.dict(os.environ, {"OPENAI_MODEL": "terminal-model"}):
@@ -44,7 +47,15 @@ class AIServiceTests(unittest.TestCase):
                 self.assertEqual(load_ai_settings(), AISettings(api_key="", model=DEFAULT_MODEL))
 
     def test_sends_only_recent_live_context_with_request_limits(self):
-        self.create_response.return_value = SimpleNamespace(status="completed", output_text="  Try another device.  ")
+        update = DiagnosticReply(
+            reply="Try another device.",
+            detected_category="internet",
+            stage=Stage.GUIDE,
+            new_facts=FactUpdates(**{kind: [] for kind in FACT_LABELS}),
+            possible_causes=[],
+            unresolved_questions=[],
+        )
+        self.create_response.return_value = SimpleNamespace(status="completed", output_text=update.model_dump_json())
         history = [
             {"role": "user", "text": "Old note.", "mode": "live"},
             *[{"role": "user", "text": f"Live note {i}.", "mode": "live"} for i in range(MAX_CONTEXT_MESSAGES)],
@@ -52,7 +63,7 @@ class AIServiceTests(unittest.TestCase):
         ]
         settings = AISettings(api_key="fixture-value", model="chosen-model")
 
-        self.assertEqual(get_live_reply(settings, history, "Internet & Wi-Fi"), "Try another device.")
+        self.assertEqual(get_live_reply(settings, history, "Internet & Wi-Fi", self.memory), update)
         self.client.assert_called_once_with(
             api_key="fixture-value",
             base_url="https://api.openai.com/v1",
@@ -66,15 +77,18 @@ class AIServiceTests(unittest.TestCase):
         self.assertEqual(request["max_output_tokens"], MAX_OUTPUT_TOKENS)
         self.assertIs(request["store"], False)
         self.assertNotIn("tools", request)
+        self.assertTrue(request["text"]["format"]["strict"])
+        self.assertEqual(request["text"]["format"]["schema"], DiagnosticReply.model_json_schema())
         self.assertEqual(
-            request["input"], [{"role": "user", "content": f"Live note {i}."} for i in range(MAX_CONTEXT_MESSAGES)]
+            request["input"][1:], [{"role": "user", "content": f"Live note {i}."} for i in range(MAX_CONTEXT_MESSAGES)]
         )
+        self.assertEqual(json.loads(request["input"][0]["content"].split("\n", 1)[1])["facts"], {})
 
     def test_missing_and_malformed_keys_do_not_create_a_client(self):
         with self.assertRaisesRegex(AIServiceError, "needs an OpenAI API key"):
-            get_live_reply(AISettings(api_key=""), self.history, None)
+            get_live_reply(AISettings(api_key=""), self.history, None, self.memory)
         with self.assertRaisesRegex(AIServiceError, "could not authenticate"):
-            get_live_reply(AISettings(api_key="malformed value"), self.history, None)
+            get_live_reply(AISettings(api_key="malformed value"), self.history, None, self.memory)
         self.client.assert_not_called()
 
     def test_http_errors_have_safe_user_messages(self):
@@ -97,7 +111,7 @@ class AIServiceTests(unittest.TestCase):
                     body={"code": code},
                 )
                 with self.assertRaisesRegex(AIServiceError, message) as raised:
-                    get_live_reply(self.settings, self.history, None)
+                    get_live_reply(self.settings, self.history, None, self.memory)
                 self.assertNotIn("private error detail", str(raised.exception))
 
     def test_connection_failure_and_timeout_are_distinct(self):
@@ -109,7 +123,7 @@ class AIServiceTests(unittest.TestCase):
             with self.subTest(error=type(error).__name__):
                 self.create_response.side_effect = error
                 with self.assertRaisesRegex(AIServiceError, message):
-                    get_live_reply(self.settings, self.history, None)
+                    get_live_reply(self.settings, self.history, None, self.memory)
 
     def test_incomplete_empty_and_unexpected_replies_are_handled(self):
         for response, message in [
@@ -120,4 +134,31 @@ class AIServiceTests(unittest.TestCase):
         ]:
             self.create_response.return_value = response
             with self.assertRaisesRegex(AIServiceError, message):
-                get_live_reply(self.settings, self.history, None)
+                get_live_reply(self.settings, self.history, None, self.memory)
+
+    def test_invalid_structured_replies_are_rejected_without_retry(self):
+        valid = {
+            "reply": "What happened when you tried it?",
+            "detected_category": None,
+            "stage": Stage.IDENTIFY,
+            "new_facts": {kind: [] for kind in FACT_LABELS},
+            "possible_causes": [],
+            "unresolved_questions": [],
+        }
+        invalid = [
+            "not JSON",
+            '{"reply": "missing state"}',
+            json.dumps({**valid, "detected_category": "printer"}),
+            json.dumps({**valid, "stage": "Automatic repair"}),
+            json.dumps({**valid, "reply": " "}),
+            json.dumps({**valid, "new_facts": {"symptoms": []}}),
+            json.dumps({**valid, "unresolved_questions": "Should be a list"}),
+            json.dumps({**valid, "unexpected": "field"}),
+        ]
+        for text in invalid:
+            with self.subTest(text=text):
+                self.create_response.reset_mock()
+                self.create_response.return_value = SimpleNamespace(status="completed", output_text=text)
+                with self.assertRaisesRegex(AIServiceError, "did not return a usable reply"):
+                    get_live_reply(self.settings, self.history, None, self.memory)
+                self.create_response.assert_called_once()

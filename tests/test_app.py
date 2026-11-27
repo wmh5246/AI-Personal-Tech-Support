@@ -1,5 +1,6 @@
 """Exercise the same Streamlit widgets and callbacks used in the browser."""
 
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,9 +9,22 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 
 from ai_service import AIServiceError, AISettings
+from diagnostic_state import DiagnosticReply, FACT_LABELS, FactUpdates, ReportedFact, Stage
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
+
+
+def live_response(reply, category=None, stage=Stage.IDENTIFY, facts=None):
+    update = DiagnosticReply(
+        reply=reply,
+        detected_category=category,
+        stage=stage,
+        new_facts=FactUpdates(**{kind: (facts or {}).get(kind, []) for kind in FACT_LABELS}),
+        possible_causes=[],
+        unresolved_questions=[],
+    )
+    return SimpleNamespace(status="completed", output_text=update.model_dump_json())
 
 
 class TroubleshootingAppTests(unittest.TestCase):
@@ -100,7 +114,8 @@ class TroubleshootingAppTests(unittest.TestCase):
 
         self.app.chat_input[0].set_value("My PC overheats.").run()
         self.assertEqual(len(self.app.chat_message), 2)
-        self.assertIn("When did the problem start", self.app.chat_message[1].text[0].value)
+        self.assertIn("particular game", self.app.chat_message[1].text[0].value)
+        self.assert_sidebar_contains("Overheating & Gaming")
 
 
 class LiveAppTests(unittest.TestCase):
@@ -109,8 +124,8 @@ class LiveAppTests(unittest.TestCase):
         client = self.enterContext(patch("ai_service.OpenAI"))
         create_response = client.return_value.__enter__.return_value.responses.create
         create_response.side_effect = [
-            SimpleNamespace(status="completed", output_text="Are other devices affected?"),
-            SimpleNamespace(status="completed", output_text="Check whether it happens near the router, too."),
+            live_response("Are other devices affected?", "internet", Stage.GATHER),
+            live_response("Check whether it happens near the router, too.", "internet", Stage.GUIDE),
         ]
         app = AppTest.from_file(str(APP_PATH)).run()
         self.assertFalse(app.toggle(key="preview_mode").value)
@@ -131,7 +146,7 @@ class LiveAppTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(create_response.call_count, 2)
         self.assertEqual(
-            create_response.call_args.kwargs["input"],
+            create_response.call_args.kwargs["input"][1:],
             [
                 {"role": "user", "content": "My Wi-Fi drops."},
                 {"role": "assistant", "content": "Are other devices affected?"},
@@ -150,7 +165,7 @@ class LiveAppTests(unittest.TestCase):
         self.enterContext(patch("ai_service.load_ai_settings", return_value=AISettings(api_key="mock-key")))
         client = self.enterContext(patch("ai_service.OpenAI"))
         create_response = client.return_value.__enter__.return_value.responses.create
-        create_response.return_value = SimpleNamespace(status="completed", output_text="When did it start?")
+        create_response.return_value = live_response("When did it start?")
         app = AppTest.from_file(str(APP_PATH)).run()
         app.toggle(key="preview_mode").set_value(True).run()
         app.chat_input[0].set_value("A preview-only example.").run()
@@ -161,7 +176,9 @@ class LiveAppTests(unittest.TestCase):
         client.assert_not_called()
         app.chat_input[0].set_value("Live example.").run()
         self.assertFalse(app.exception)
-        self.assertEqual(create_response.call_args.kwargs["input"], [{"role": "user", "content": "Live example."}])
+        request_input = create_response.call_args.kwargs["input"]
+        self.assertEqual(request_input[1:], [{"role": "user", "content": "Live example."}])
+        self.assertNotIn("A preview-only example.", request_input[0]["content"])
         self.assertEqual(app.chat_message[1].caption[0].value, "Simulated response · Placeholder")
         self.assertEqual(app.chat_message[3].caption[0].value, "Live AI · OpenAI")
 
@@ -194,3 +211,107 @@ class LiveAppTests(unittest.TestCase):
         self.assertFalse(app.error)
         self.assertFalse(app.chat_message)
         self.assertEqual(reply.call_count, 1)
+
+    def test_detected_category_and_stage_update_and_allow_manual_correction(self):
+        self.enterContext(patch("ai_service.load_ai_settings", return_value=AISettings(api_key="mock-key")))
+        client = self.enterContext(patch("ai_service.OpenAI"))
+        create_response = client.return_value.__enter__.return_value.responses.create
+        create_response.side_effect = [
+            live_response("What are you seeing when you use the PC?"),
+            live_response("Watch the Wi-Fi icon when this happens.", "internet", Stage.GUIDE),
+            live_response("What does the storage warning say?", "internet", Stage.GATHER),
+            live_response("That sounds resolved for now.", "internet", Stage.RESOLVE),
+        ]
+        app = AppTest.from_file(str(APP_PATH)).run()
+        app.chat_input[0].set_value("My PC isn't right.").run()
+        self.assertIn("None selected", [item.value for item in app.sidebar.markdown])
+        self.assertIn("**Problem identification**", [item.value for item in app.sidebar.markdown])
+
+        app.chat_input[0].set_value("Wi-Fi drops when I make video calls.").run()
+        self.assertFalse(app.exception)
+        self.assertIn("Internet & Wi-Fi", [item.value for item in app.sidebar.markdown])
+        self.assertIn("**Guided troubleshooting**", [item.value for item in app.sidebar.markdown])
+
+        app.button(key="category-storage").click().run()
+        self.assertIn("Storage", [item.value for item in app.sidebar.markdown])
+        self.assertEqual(create_response.call_count, 2)
+        app.chat_input[0].set_value("I want to investigate the storage warning first.").run()
+        self.assertIn("Manually selected category: Storage.", create_response.call_args.kwargs["instructions"])
+        self.assertIn("Storage", [item.value for item in app.sidebar.markdown])
+        self.assertIn("**Gathering diagnostic information**", [item.value for item in app.sidebar.markdown])
+        app.button(key="auto-category").click().run()
+        self.assertIn("Internet & Wi-Fi", [item.value for item in app.sidebar.markdown])
+        self.assertEqual(create_response.call_count, 3)
+        app.chat_input[0].set_value("Wi-Fi is working again.").run()
+        self.assertIn("**Resolution or escalation**", [item.value for item in app.sidebar.markdown])
+        self.assertIn(":blue-badge[Review outcome]", [item.value for item in app.sidebar.markdown])
+        self.assertEqual(create_response.call_count, 4)
+
+    def test_older_facts_stay_in_context_and_reset_clears_both_modes(self):
+        self.enterContext(patch("ai_service.load_ai_settings", return_value=AISettings(api_key="mock-key")))
+        client = self.enterContext(patch("ai_service.OpenAI"))
+        create_response = client.return_value.__enter__.return_value.responses.create
+        create_response.side_effect = [
+            live_response(
+                "Is the phone affected too?",
+                "internet",
+                Stage.GATHER,
+                {"system_information": [ReportedFact(quote="Windows 11", replaces=None)]},
+            ),
+            live_response("The adapter may be involved.", "internet", Stage.EVALUATE),
+            live_response("When did it start?"),
+        ]
+        app = AppTest.from_file(str(APP_PATH)).run()
+        original = "My Windows 11 laptop loses Wi-Fi."
+        app.chat_input[0].set_value(original).run()
+        self.assertIn("• Windows 11", [item.value for item in app.sidebar.text])
+        app.session_state["messages"].extend(
+            {"role": "user", "text": f"Later note {i}.", "mode": "live"} for i in range(11)
+        )
+
+        app.chat_input[0].set_value("Only the laptop loses connection.").run()
+        self.assertFalse(app.exception)
+        request = create_response.call_args.kwargs["input"]
+        self.assertNotIn(original, [item["content"] for item in request[1:]])
+        retained = json.loads(request[0]["content"].split("\n", 1)[1])
+        self.assertEqual(retained["original_problem"], original)
+        self.assertEqual(retained["facts"], {"system_information": ["Windows 11"]})
+        self.assertIn("• Windows 11", [item.value for item in app.sidebar.text])
+
+        app.toggle(key="preview_mode").set_value(True).run()
+        app.chat_input[0].set_value("My preview storage is full.").run()
+        app.button(key="new-session").click().run()
+        self.assertFalse(app.chat_message)
+        self.assertIn("**Problem identification**", [item.value for item in app.sidebar.markdown])
+        self.assertIn("None selected", [item.value for item in app.sidebar.markdown])
+
+        app.toggle(key="preview_mode").set_value(False).run()
+        app.chat_input[0].set_value("My PC has an issue.").run()
+        request = create_response.call_args.kwargs["input"]
+        retained = json.loads(request[0]["content"].split("\n", 1)[1])
+        self.assertEqual(retained["original_problem"], "My PC has an issue.")
+        self.assertEqual(retained["facts"], {})
+        self.assertEqual(len(request), 2)
+
+    def test_malformed_live_reply_leaves_current_stage_and_facts_intact(self):
+        self.enterContext(patch("ai_service.load_ai_settings", return_value=AISettings(api_key="mock-key")))
+        client = self.enterContext(patch("ai_service.OpenAI"))
+        create_response = client.return_value.__enter__.return_value.responses.create
+        create_response.side_effect = [
+            live_response(
+                "Which drive shows the warning?",
+                "storage",
+                Stage.GATHER,
+                {"symptoms": [ReportedFact(quote="low disk space", replaces=None)]},
+            ),
+            SimpleNamespace(status="completed", output_text='{"reply": "partial"}'),
+        ]
+        app = AppTest.from_file(str(APP_PATH)).run()
+        app.chat_input[0].set_value("I see low disk space.").run()
+        app.chat_input[0].set_value("The warning names C:.").run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.chat_message), 3)
+        self.assertIn("did not return a usable reply", app.error[0].value)
+        self.assertIn("**Gathering diagnostic information**", [item.value for item in app.sidebar.markdown])
+        self.assertIn("• low disk space", [item.value for item in app.sidebar.text])
+        self.assertEqual(create_response.call_count, 2)

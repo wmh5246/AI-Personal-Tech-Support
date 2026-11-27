@@ -2,7 +2,7 @@
 
 AI Personal Tech Support is an individual IST 440W capstone for ordinary Windows PC users. It provides a local help desk interface with beginner-friendly AI replies and an optional scripted preview.
 
-You can describe a problem directly or choose Internet & Wi-Fi, Slow PC, Storage, Audio & Drivers, or Overheating & Gaming. The sidebar shows your selected category and session status. The chat keeps the current conversation in memory, and **New troubleshooting session** clears the messages and category.
+You can describe a problem directly or choose Internet & Wi-Fi, Slow PC, Storage, Audio & Drivers, or Overheating & Gaming. The sidebar shows the current category, diagnostic stage, and notes. **New troubleshooting session** clears the chat, notes, and category selection.
 
 ## Windows prerequisites
 
@@ -44,7 +44,7 @@ The commands call the virtual environment's Python directly, so they work withou
    ```
 
 3. In the local file, paste your key after `OPENAI_API_KEY=` and save. Git ignores `.env`. Keep the tracked `.env.example` key field blank.
-4. To use a different model, set `OPENAI_MODEL` in `.env` to a Responses API model your project can access. The default is `gpt-5.4-mini`. A PowerShell setting such as `$env:OPENAI_MODEL = 'gpt-5.4-mini'` takes precedence over the file for that terminal session. [GPT-5.4 mini model reference](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
+4. To use a different model, set `OPENAI_MODEL` in `.env` to a model your project can access that supports the Responses API and Structured Outputs. The default is `gpt-5.4-mini`. A PowerShell setting such as `$env:OPENAI_MODEL = 'gpt-5.4-mini'` takes precedence over the file for that terminal session. [GPT-5.4 mini model reference](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
 
 OpenAI API usage is billed separately from ChatGPT subscriptions. Live replies use input and output tokens, including recent live conversation history sent with each message. Check your API project billing and current model prices before using live mode. [API pricing](https://developers.openai.com/api/docs/pricing) · [OpenAI billing help](https://help.openai.com/en/articles/9039756-managing-billing-for-chatgpt-and-the-api-platform)
 
@@ -60,8 +60,16 @@ Keep PowerShell open while using the app. Press **Ctrl+C** in that window to sto
 
 ### Choose a reply mode
 
-- **Live AI.** The app starts in live mode when a key is configured. Sending a message shares the last 11 live-mode messages, including the new message, and the selected category with OpenAI. Leave out passwords and other sensitive information. The app makes one request per submission, caps output at 400 tokens, and uses no automatic retries.
-- **Simulated preview.** Turn on **Simulated preview** in the sidebar to use the local scripted replies. Preview is the default when the key is missing. Preview messages stay local, including when you switch back to live mode.
+- **Live AI.** The app starts in live mode when a key is configured. Sending a message shares up to 11 recent live-mode messages, the retained live diagnostic notes, and any manual category selection with OpenAI. Leave out passwords and other sensitive information. One request returns both the chat reply and a structured update, capped at 800 output tokens total, with no automatic retries.
+- **Simulated preview.** Turn on **Simulated preview** in the sidebar to use local keyword matching and scripted replies. Preview is the default when the key is missing. Preview messages and notes stay local, including when you switch back to live mode.
+
+### Follow a diagnostic session
+
+The assistant asks for clarification when the symptom could fit several categories. To correct the category, click a quick start. To return to the assistant's detected category, click **Use automatic category** in the sidebar.
+
+The five stages are **Problem identification**, **Gathering diagnostic information**, **Evaluating possible causes**, **Guided troubleshooting**, and **Resolution or escalation**. The stage reflects what the assistant is doing in its current reply, so it may skip ahead to a safe observation or return to diagnostic questions when new details come in.
+
+Open **Diagnostic notes** to review the original description, reported details, possible causes, and open questions. Live notes retain user-reported details after those messages leave the recent-chat window. The app checks quoted facts against the user's messages before saving them. Possible causes remain hypotheses, and unknown details are left blank. A malformed reply leaves the last valid notes and stage in place.
 
 ## Verify the app
 
@@ -77,11 +85,12 @@ Try these scenarios in the browser.
 | --- | --- |
 | Open the app. | The dark interface shows five quick starts and a chat input. The sidebar says **Ready to start**. |
 | Turn on **Simulated preview**, select **Internet & Wi-Fi**, and send `My Wi-Fi disconnects during video calls.` | The sidebar shows the category and **In progress**. The user message and a **Simulated response · Placeholder** appear without using the API. |
-| With a key configured, turn off **Simulated preview** and send the same example. | A loading indicator appears while the app waits for OpenAI. The response is labeled **Live AI · OpenAI**. |
-| In live mode, follow up with `It also affects my phone.` | The assistant has the earlier Wi-Fi description for context. Both turns remain visible. Changing category updates the sidebar without sending a request. |
+| In live mode, send `My PC is acting up.` | A loading indicator appears while the app waits for OpenAI. The live reply asks what is happening, the category remains unselected, and the stage is **Problem identification**. |
+| Follow up with `My Windows 11 laptop drops Wi-Fi during calls. My phone stays connected.` | The sidebar detects **Internet & Wi-Fi**. The app can ask a targeted question, compare causes, or suggest a safe observation. **Diagnostic notes** can show Windows 11 and the reported symptoms. |
+| Click **Storage**, then **Use automatic category**. | The sidebar shows the manual selection, then returns to the detected category. The conversation stays visible and the buttons make no API requests. |
 | Try sending a message made of only spaces. | The conversation stays unchanged. If the browser submits the message, the app asks for a description. |
-| Click **New troubleshooting session**. | The category and conversation clear, the status returns to **Ready to start**, and you can send a new message. |
+| Click **New troubleshooting session**. | The conversation, category, and notes clear. The stage returns to **Problem identification** and the status to **Ready to start**. |
 
 ## Current limitations
 
-Live replies are AI-generated suggestions based on what you describe. The app has no access to your computer's diagnostics and does not retrieve or verify sources. Messages are limited to 2,000 characters. Conversation history is kept only in the active Streamlit session and disappears when you reload the page or start a new session.
+Live replies, classification, and the choice of stage depend on the model and the details you provide. The app checks that note excerpts occur in your messages. It cannot independently verify the state of the PC. The simulated preview demonstrates category and initial-stage behavior with simple keyword rules and scripted questions. It does not extract detailed notes or advance through the full live workflow. Messages are limited to 2,000 characters. Chat and notes are kept only in the active Streamlit session and clear when you reload the page or start a new session.
