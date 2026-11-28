@@ -10,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 from ai_service import AIServiceError, AISettings
 from diagnostic_state import DiagnosticReply, FACT_LABELS, FactUpdates, ReportedFact, Stage
+from knowledge_base import KnowledgeBaseError
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
@@ -146,7 +147,7 @@ class LiveAppTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(create_response.call_count, 2)
         self.assertEqual(
-            create_response.call_args.kwargs["input"][1:],
+            create_response.call_args.kwargs["input"][-3:],
             [
                 {"role": "user", "content": "My Wi-Fi drops."},
                 {"role": "assistant", "content": "Are other devices affected?"},
@@ -168,9 +169,12 @@ class LiveAppTests(unittest.TestCase):
         create_response.return_value = live_response("When did it start?")
         app = AppTest.from_file(str(APP_PATH)).run()
         app.toggle(key="preview_mode").set_value(True).run()
-        app.chat_input[0].set_value("A preview-only example.").run()
+        with patch("knowledge_base.load_knowledge_base") as loader:
+            app.chat_input[0].set_value("A preview-only example.").run()
+        loader.assert_not_called()
         client.assert_not_called()
         self.assertEqual(app.chat_message[1].caption[0].value, "Simulated response · Placeholder")
+        self.assertIn("Not performed in simulated preview.", [item.value for item in app.sidebar.caption])
 
         app.toggle(key="preview_mode").set_value(False).run()
         client.assert_not_called()
@@ -314,4 +318,60 @@ class LiveAppTests(unittest.TestCase):
         self.assertIn("did not return a usable reply", app.error[0].value)
         self.assertIn("**Gathering diagnostic information**", [item.value for item in app.sidebar.markdown])
         self.assertIn("• low disk space", [item.value for item in app.sidebar.text])
+        self.assertEqual(create_response.call_count, 2)
+
+    def test_live_retrieval_sends_reference_data_and_shows_the_current_titles(self):
+        self.enterContext(patch("ai_service.load_ai_settings", return_value=AISettings(api_key="mock-key")))
+        client = self.enterContext(patch("ai_service.OpenAI"))
+        create_response = client.return_value.__enter__.return_value.responses.create
+        create_response.return_value = live_response("Watch the Wi-Fi icon during a call.", "internet", Stage.GUIDE)
+        app = AppTest.from_file(str(APP_PATH)).run()
+        self.assertIn("Not performed yet.", [item.value for item in app.sidebar.caption])
+
+        problem = "My Wi-Fi disconnects during video calls."
+        app.chat_input[0].set_value(problem).run()
+        self.assertFalse(app.exception)
+        self.assertIn("• Wi-Fi drops during calls or streaming", [item.value for item in app.sidebar.text])
+        request = create_response.call_args.kwargs
+        self.assertTrue(request["text"]["format"]["strict"])
+        self.assertEqual(request["input"][-1], {"role": "user", "content": problem})
+        reference_input = request["input"][1]
+        self.assertEqual(reference_input["role"], "user")
+        self.assertIn("reference data only", reference_input["content"])
+        references = json.loads(reference_input["content"].split("\n", 1)[1])
+        self.assertEqual(references[0]["id"], "wifi-drops")
+        self.assertLessEqual(len(references), 3)
+        self.assertTrue(references[0]["diagnostic_steps"] and references[0]["safety"])
+        self.assertNotIn(references[0]["title"], request["instructions"])
+        self.assertNotIn("source_url", references[0])
+        create_response.assert_called_once()
+
+        app.run()
+        create_response.assert_called_once()
+        app.button(key="new-session").click().run()
+        self.assertIn("Not performed yet.", [item.value for item in app.sidebar.caption])
+        self.assertNotIn("• Wi-Fi drops during calls or streaming", [item.value for item in app.sidebar.text])
+
+    def test_no_match_and_unavailable_corpus_allow_a_regular_live_reply(self):
+        self.enterContext(patch("ai_service.load_ai_settings", return_value=AISettings(api_key="mock-key")))
+        client = self.enterContext(patch("ai_service.OpenAI"))
+        create_response = client.return_value.__enter__.return_value.responses.create
+        create_response.return_value = live_response("Can you describe the symptom?")
+        failing_loader = patch("knowledge_base.load_knowledge_base", side_effect=KnowledgeBaseError)
+        app = AppTest.from_file(str(APP_PATH)).run()
+
+        app.chat_input[0].set_value("My PC is acting up.").run()
+        self.assertIn("Search completed. No relevant entries found.", [item.value for item in app.sidebar.caption])
+        self.assertEqual(len(app.chat_message), 2)
+        self.assertEqual(len(create_response.call_args.kwargs["input"]), 2)
+
+        with failing_loader:
+            app.chat_input[0].set_value("My Wi-Fi disconnects during video calls.").run()
+        self.assertFalse(app.exception)
+        self.assertIn(
+            "Local knowledge base unavailable. Live chat can continue with general guidance.",
+            [item.value for item in app.sidebar.caption],
+        )
+        self.assertEqual(len(app.chat_message), 4)
+        self.assertEqual(len(create_response.call_args.kwargs["input"]), 4)
         self.assertEqual(create_response.call_count, 2)

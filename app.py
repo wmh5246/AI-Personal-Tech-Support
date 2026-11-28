@@ -11,6 +11,7 @@ except ModuleNotFoundError:
     st.stop()
 
 from diagnostic_state import Category, DiagnosticMemory, FACT_LABELS, Stage
+from knowledge_base import RetrievalResult, retrieve_references
 from troubleshooting import QUICK_STARTS, detect_preview_category, placeholder_reply
 
 
@@ -25,6 +26,7 @@ def reset_session() -> None:
     st.session_state.input_error = None
     st.session_state.reply_error = None
     st.session_state.reply_pending = False
+    st.session_state.last_retrieval = None
     st.session_state.diagnostics = {"live": DiagnosticMemory(), "preview": DiagnosticMemory()}
 
 
@@ -105,6 +107,7 @@ def render_session_details(memory: DiagnosticMemory) -> None:
     stage_number = steps.index(memory.stage) + 1
     st.progress(stage_number / len(steps), text=f"Stage {stage_number} of {len(steps)}")
 
+    render_knowledge_status()
     with st.expander("Diagnostic notes"):
         if memory.original_problem is None:
             st.caption("No diagnostic details recorded yet.")
@@ -120,6 +123,23 @@ def render_session_details(memory: DiagnosticMemory) -> None:
             if items:
                 st.caption(label)
                 st.text("\n".join(f"• {item}" for item in items))
+
+
+def render_knowledge_status() -> None:
+    st.caption("Knowledge retrieval")
+    result: RetrievalResult | None = st.session_state.last_retrieval
+    if st.session_state.preview_mode:
+        st.caption("Not performed in simulated preview.")
+    elif result is None:
+        st.caption("Not performed yet.")
+    elif not result.available:
+        st.caption("Local knowledge base unavailable. Live chat can continue with general guidance.")
+    elif not result.documents:
+        st.caption("Search completed. No relevant entries found.")
+    else:
+        st.caption("References retrieved for the latest live message")
+        st.text("\n".join(f"• {document.title}" for document in result.documents))
+        st.caption("These are general references. Diagnostic notes show what you reported.")
 
 
 def render_quick_starts() -> None:
@@ -171,9 +191,21 @@ def reply_to_pending_message(settings: AISettings) -> None:
             memory.unresolved_questions = [reply]
     else:
         category_label = QUICK_STARTS[category]["label"] if category else None
+        session_context = tuple(
+            fact
+            for kind in ("symptoms", "recent_changes", "attempted_steps", "reported_results")
+            for fact in memory.facts.get(kind, [])[-2:]
+        )
+        retrieval = retrieve_references(
+            messages[-1]["text"],
+            original=memory.original_problem or "",
+            category=category or memory.detected_category,
+            session_context=session_context,
+        )
+        st.session_state.last_retrieval = retrieval
         try:
             with st.spinner("Waiting for OpenAI…", show_time=True):
-                update = get_live_reply(settings, messages, category_label, memory)
+                update = get_live_reply(settings, messages, category_label, memory, retrieval.documents)
         except AIServiceError as error:
             st.session_state.reply_error = str(error)
             return
@@ -197,8 +229,9 @@ def render_conversation(settings: AISettings) -> None:
             st.caption("Simulated preview · Scripted replies stay on this computer.")
         else:
             st.caption(
-                "Live AI · Sending a message shares your recent live conversation, diagnostic notes, and selected category "
-                "with OpenAI. Leave out passwords and other sensitive details."
+                "Live AI · Searching the knowledge base runs on this computer. Sending a message shares your recent live "
+                "conversation, diagnostic notes, selected category, and any retrieved reference summaries with OpenAI. "
+                "Leave out passwords and other sensitive details."
             )
         if live_key_missing:
             st.warning(f"{MISSING_KEY} Turn on Simulated preview to continue without a key.")
@@ -237,6 +270,7 @@ def main() -> None:
     st.session_state.setdefault("input_error", None)
     st.session_state.setdefault("reply_error", None)
     st.session_state.setdefault("reply_pending", False)
+    st.session_state.setdefault("last_retrieval", None)
     st.session_state.setdefault("diagnostics", {"live": DiagnosticMemory(), "preview": DiagnosticMemory()})
 
     settings = load_ai_settings()

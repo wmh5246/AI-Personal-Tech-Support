@@ -1,0 +1,527 @@
+[
+  {
+    "id": "wifi-missing",
+    "title": "Wi-Fi networks are missing",
+    "category": "internet",
+    "symptoms": [
+      "Wi-Fi is missing from Quick Settings",
+      "No wireless networks are listed",
+      "Wi-Fi toggle disappeared or airplane mode is on"
+    ],
+    "possible_causes": [
+      "Wi-Fi may be off, airplane mode may be enabled, or Windows may not detect the adapter."
+    ],
+    "diagnostic_steps": [
+      "Check the Wi-Fi and airplane mode tiles.",
+      "If the Wi-Fi tile is missing, look for a wireless adapter in Device Manager without changing it."
+    ],
+    "safety": "A missing adapter entry does not establish a hardware fault. Leave drivers and firmware alone during basic checks.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix Wi-Fi connection issues in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/connectivity-networking/fix-wi-fi-connection-issues-in-windows"
+  },
+  {
+    "id": "wifi-no-internet",
+    "title": "Connected to Wi-Fi but no internet",
+    "category": "internet",
+    "symptoms": [
+      "Connected to Wi-Fi with No Internet status",
+      "Websites will not load even though Wi-Fi is connected",
+      "No internet on multiple devices connected to the router"
+    ],
+    "possible_causes": [
+      "The local connection can be intact while access beyond the router, including service from the provider, is unavailable."
+    ],
+    "diagnostic_steps": [
+      "Try a second website and check the same network on another device.",
+      "If multiple devices lose internet, investigate the shared connection before changing PC settings."
+    ],
+    "safety": "A router restart interrupts everyone on that network. Avoid a network reset during initial checks.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix Wi-Fi connection issues in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/connectivity-networking/fix-wi-fi-connection-issues-in-windows"
+  },
+  {
+    "id": "wifi-drops",
+    "title": "Wi-Fi drops during calls or streaming",
+    "category": "internet",
+    "symptoms": [
+      "Wi-Fi disconnects during video calls",
+      "Wireless connection drops repeatedly when streaming",
+      "Weak Wi-Fi signal far from the router"
+    ],
+    "possible_causes": [
+      "Distance, interference, or a PC-specific connection problem may contribute."
+    ],
+    "diagnostic_steps": [
+      "Watch whether the Wi-Fi status itself changes when the call freezes.",
+      "Compare the behavior closer to the router or against another device on the same network."
+    ],
+    "safety": "Brief interruptions during a test are possible. A network reset removes adapter settings and can require VPN or virtual switch setup again. Reserve it for after basic checks.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix Wi-Fi connection issues in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/connectivity-networking/fix-wi-fi-connection-issues-in-windows"
+  },
+  {
+    "id": "wifi-password",
+    "title": "Cannot rejoin a saved Wi-Fi network",
+    "category": "internet",
+    "symptoms": [
+      "Wi-Fi will not connect after the router password changed",
+      "Saved wireless network rejects the new password",
+      "Cannot join a known Wi-Fi network"
+    ],
+    "possible_causes": [
+      "The selected network or its saved profile may no longer match the router configuration."
+    ],
+    "diagnostic_steps": [
+      "Confirm the network name and whether other devices can join it.",
+      "If only the saved profile fails, consider reconnecting after confirming you know the current password."
+    ],
+    "safety": "Forgetting a network removes its saved connection profile. Enter the password only in Windows and never in chat.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix Wi-Fi connection issues in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/connectivity-networking/fix-wi-fi-connection-issues-in-windows"
+  },
+  {
+    "id": "ethernet-link",
+    "title": "Wired Ethernet shows disconnected",
+    "category": "internet",
+    "symptoms": [
+      "Ethernet cable is plugged in but Windows says disconnected",
+      "Wired connection shows network cable unplugged",
+      "USB Ethernet adapter has no link"
+    ],
+    "possible_causes": [
+      "A loose cable, faulty cable or port, or an adapter issue may prevent the wired link."
+    ],
+    "diagnostic_steps": [
+      "Reseat both ends and check Windows Ethernet status.",
+      "If available, compare a known-good cable or another suitable router port while keeping other settings the same."
+    ],
+    "safety": "Avoid removing the adapter driver or resetting the network as an initial test.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix Ethernet connection problems in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/connectivity-networking/fix-ethernet-connection-problems-in-windows"
+  },
+  {
+    "id": "slow-startup",
+    "title": "Windows takes a long time to start",
+    "category": "performance",
+    "symptoms": [
+      "PC is slow at startup or after signing in",
+      "Many programs open at login",
+      "Startup apps show high impact"
+    ],
+    "possible_causes": [
+      "Programs launched at sign-in may compete for resources."
+    ],
+    "diagnostic_steps": [
+      "Review Startup apps and the impact column in Task Manager.",
+      "If an optional and recognized startup app is a likely contributor, change one at a time and compare the next sign-in."
+    ],
+    "safety": "Leave security, accessibility, device, and work-managed components enabled unless their owner confirms the change.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Tips to improve PC performance in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows"
+  },
+  {
+    "id": "high-cpu",
+    "title": "High CPU usage during a slowdown",
+    "category": "performance",
+    "symptoms": [
+      "Task Manager shows CPU near 100 percent",
+      "Processor usage stays high while the PC is slow",
+      "A process uses most of the CPU"
+    ],
+    "possible_causes": [
+      "One application or background task may be occupying the processor."
+    ],
+    "diagnostic_steps": [
+      "In Task Manager, sort Processes by CPU during the slowdown.",
+      "Check whether the load comes from an app you recognize and compare after closing it normally if safe."
+    ],
+    "safety": "Save work first. Avoid ending unknown, security, or Windows processes.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Tips to improve PC performance in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows"
+  },
+  {
+    "id": "high-memory",
+    "title": "High memory usage with many apps or tabs",
+    "category": "performance",
+    "symptoms": [
+      "RAM is nearly full",
+      "Memory usage stays high with many browser tabs",
+      "PC becomes sluggish when many programs are open"
+    ],
+    "possible_causes": [
+      "Running applications and tabs may be competing for available memory."
+    ],
+    "diagnostic_steps": [
+      "Sort Task Manager processes by Memory and note which familiar apps are largest.",
+      "Close unneeded tabs or apps normally, then compare responsiveness."
+    ],
+    "safety": "Save work before closing apps. Avoid memory-cleaner downloads.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Tips to improve PC performance in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows"
+  },
+  {
+    "id": "high-disk",
+    "title": "Disk activity spikes while Windows is slow",
+    "category": "performance",
+    "symptoms": [
+      "Task Manager shows 100 percent disk active time",
+      "Disk usage is high and Windows stalls",
+      "Disks stay busy while applications load slowly"
+    ],
+    "possible_causes": [
+      "A process may be keeping storage busy. High activity alone does not mean the drive is full or failing."
+    ],
+    "diagnostic_steps": [
+      "Sort Processes by Disk during the slowdown and look for a sustained pattern.",
+      "Note whether a recognizable background task is active and compare once it finishes."
+    ],
+    "safety": "Avoid interrupting updates or ending unknown processes. Review the source of the activity before changing anything.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Tips to improve PC performance in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/performance-optimization/tips-to-improve-pc-performance-in-windows"
+  },
+  {
+    "id": "single-app-slow",
+    "title": "One older application is slow or freezes",
+    "category": "performance",
+    "symptoms": [
+      "Only one older program freezes after a Windows upgrade",
+      "One application hangs but other apps are responsive",
+      "An old app became sluggish after a Windows update"
+    ],
+    "possible_causes": [
+      "The installed application version may have a compatibility issue with the current Windows version."
+    ],
+    "diagnostic_steps": [
+      "Check whether the issue is confined to that application.",
+      "Check the app publisher or Microsoft Store for a compatible version before exploring compatibility options."
+    ],
+    "safety": "Save the app's data first. Use its official publisher and avoid compatibility downloads from unfamiliar sites.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Make older apps or programs compatible with the latest version of Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/apps/make-older-apps-or-programs-compatible-with-the-latest-version-of-windows"
+  },
+  {
+    "id": "c-drive-low",
+    "title": "Low free space on the system drive",
+    "category": "storage",
+    "symptoms": [
+      "C drive is almost full or has only a few GB free",
+      "Windows shows a low disk space warning",
+      "System drive has little remaining storage"
+    ],
+    "possible_causes": [
+      "Installed apps, personal files, or temporary data may be using most of the drive."
+    ],
+    "diagnostic_steps": [
+      "Open Settings > System > Storage and note the space available on the system drive.",
+      "Review which categories occupy the most space before deciding what to move or clean up."
+    ],
+    "safety": "Review the files involved and preserve backups. Do not delete system folders or unknown files.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Free up drive space in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/storage-filemanagement/free-up-drive-space-in-windows"
+  },
+  {
+    "id": "temporary-files",
+    "title": "Review temporary files and Storage Sense",
+    "category": "storage",
+    "symptoms": [
+      "Storage Sense or Temporary files uses a lot of space",
+      "Large Recycle Bin takes up disk space",
+      "Temporary files keep accumulating"
+    ],
+    "possible_causes": [
+      "Temporary files or retained Recycle Bin items may use space on the system drive."
+    ],
+    "diagnostic_steps": [
+      "Open Storage settings and review the temporary-file categories or Storage Sense rules.",
+      "Confirm what the selected cleanup would remove before using it."
+    ],
+    "safety": "Cleanup rules can delete Recycle Bin contents or files in Downloads if configured. Review these settings before enabling automation.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Manage drive space with Storage Sense",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/storage-filemanagement/manage-drive-space-with-storage-sense"
+  },
+  {
+    "id": "onedrive-space",
+    "title": "OneDrive files take up local disk space",
+    "category": "storage",
+    "symptoms": [
+      "OneDrive folder fills the disk",
+      "OneDrive files show green check icons",
+      "Always keep on this device uses too much storage"
+    ],
+    "possible_causes": [
+      "Locally downloaded or pinned OneDrive files occupy disk space."
+    ],
+    "diagnostic_steps": [
+      "Check file status icons in File Explorer and confirm sync has completed.",
+      "Consider freeing local space for a synced file you do not need offline."
+    ],
+    "safety": "Free up space makes the local copy online-only. Confirm the cloud copy is accessible and keep offline copies of files you need offline.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Save disk space with OneDrive Files On-Demand for Windows",
+    "source_url": "https://support.microsoft.com/en-us/onedrive/save-disk-space-with-onedrive-files-on-demand-for-windows"
+  },
+  {
+    "id": "update-space",
+    "title": "Windows Update needs more storage",
+    "category": "storage",
+    "symptoms": [
+      "Windows Update says it needs more space",
+      "Update will not install because free space is too low",
+      "Feature update asks for an external storage device"
+    ],
+    "possible_causes": [
+      "Setup needs free space to unpack and install the update."
+    ],
+    "diagnostic_steps": [
+      "Read the amount of space Windows Update asks for and check the system drive’s available space.",
+      "Review cleanup options first. Consider external storage only when Windows Update offers it."
+    ],
+    "safety": "Keep important files backed up. Do not delete Windows folders or disconnect storage being used by Setup.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Free up space for Windows updates",
+    "source_url": "https://support.microsoft.com/en-us/windows/deployment/updates-lifecycle/free-up-space-for-windows-updates"
+  },
+  {
+    "id": "external-storage",
+    "title": "Move large files to external storage",
+    "category": "storage",
+    "symptoms": [
+      "Large videos or photos take up the drive",
+      "Need to move personal files to a USB drive",
+      "Free space by transferring large personal files to an external drive"
+    ],
+    "possible_causes": [
+      "Large personal files can occupy significant space on the system drive."
+    ],
+    "diagnostic_steps": [
+      "Find large personal files in File Explorer and check available space on the destination drive.",
+      "Copy a small sample and open it from the destination before moving larger batches."
+    ],
+    "safety": "Keep a verified backup and confirm the copied files open before removing any originals. Avoid moving installed applications or system files by hand.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Free up drive space in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/experience/storage-filemanagement/free-up-drive-space-in-windows"
+  },
+  {
+    "id": "wrong-output",
+    "title": "Windows plays through the wrong audio output",
+    "category": "audio",
+    "symptoms": [
+      "No sound from speakers after plugging in a monitor",
+      "Audio plays through HDMI or the wrong output",
+      "Sound goes to the wrong headphones or speakers"
+    ],
+    "possible_causes": [
+      "Windows may be sending audio to a different output device."
+    ],
+    "diagnostic_steps": [
+      "Open the taskbar sound output selector and check which device is active.",
+      "Choose the intended device if it is listed, then play a brief test sound."
+    ],
+    "safety": "Start with low volume, especially with headphones.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix sound or audio problems in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/hardware/audio/fix-sound-or-audio-problems-in-windows"
+  },
+  {
+    "id": "one-app-muted",
+    "title": "One application has no sound",
+    "category": "audio",
+    "symptoms": [
+      "Only one app is muted while other apps play sound",
+      "Browser has no sound but Windows sounds work",
+      "An app's volume is muted in Volume mixer"
+    ],
+    "possible_causes": [
+      "The app may have a separate mute, volume, or output setting."
+    ],
+    "diagnostic_steps": [
+      "Play audio in the affected app and check its own mute setting.",
+      "Open Windows Volume mixer and check the app's volume and output device if listed."
+    ],
+    "safety": "Test at low volume and leave unrelated app settings unchanged.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix sound or audio problems in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/hardware/audio/fix-sound-or-audio-problems-in-windows"
+  },
+  {
+    "id": "mic-access",
+    "title": "Microphone does not work in a call app",
+    "category": "audio",
+    "symptoms": [
+      "Microphone works in Windows but not in the meeting app",
+      "Mic is muted or app cannot access microphone",
+      "Others cannot hear me in video calls"
+    ],
+    "possible_causes": [
+      "The selected input, mute state, or microphone permission may be wrong for that app."
+    ],
+    "diagnostic_steps": [
+      "Check the physical mute control and test the intended input in Windows Sound settings.",
+      "If Windows detects the mic, check the calling app's input selection and its microphone access."
+    ],
+    "safety": "Grant microphone access only to applications you intend to use. Managed devices may require an administrator.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix microphone problems",
+    "source_url": "https://support.microsoft.com/en-us/windows/hardware/drivers/fix-microphone-problems"
+  },
+  {
+    "id": "bluetooth-no-sound",
+    "title": "Bluetooth headset connects without sound",
+    "category": "audio",
+    "symptoms": [
+      "Bluetooth headphones say connected but play no sound",
+      "Bluetooth headset is paired but speakers still play",
+      "Bluetooth audio output is silent"
+    ],
+    "possible_causes": [
+      "The headset can be paired while another device is still selected for audio output."
+    ],
+    "diagnostic_steps": [
+      "Check the active output in Windows Sound settings.",
+      "Select the headset if available and test gently before considering a reconnect."
+    ],
+    "safety": "Keep volume low. Confirm the pairing process before removing a device.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix Bluetooth connected but no sound issue on Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/hardware/bluetooth/fix-bluetooth-connected-but-no-sound-issue-on-windows"
+  },
+  {
+    "id": "audio-after-update",
+    "title": "Audio stopped after an update",
+    "category": "audio",
+    "symptoms": [
+      "Sound stopped after Windows Update",
+      "Audio driver problem or no sound after installing an update",
+      "Speakers disappeared after an audio driver update"
+    ],
+    "possible_causes": [
+      "An update may coincide with changed audio settings or a driver issue."
+    ],
+    "diagnostic_steps": [
+      "Check whether the intended device is still listed and selected in Sound settings.",
+      "Compare the timing with Windows Update history and inspect the audio device status before considering a driver change."
+    ],
+    "safety": "Avoid third-party driver utilities. Defer rollback or reinstall until basic checks are complete and recovery options are known.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Fix sound or audio problems in Windows",
+    "source_url": "https://support.microsoft.com/en-us/windows/hardware/audio/fix-sound-or-audio-problems-in-windows"
+  },
+  {
+    "id": "heat-shutdown",
+    "title": "Laptop gets hot and shuts down during use",
+    "category": "gaming",
+    "symptoms": [
+      "Laptop overheats and shuts down unexpectedly",
+      "Laptop gets hot on a blanket or bed",
+      "Blocked vents and excessive heat under load"
+    ],
+    "possible_causes": [
+      "Blocked airflow or a cooling fault may contribute to excessive heat."
+    ],
+    "diagnostic_steps": [
+      "Stop the workload if overheating or shutdown recurs.",
+      "Once the device has cooled, check whether external vents are blocked and whether it was used on a rigid, flat surface."
+    ],
+    "safety": "Do not reproduce a shutdown to test it. Stop using the PC and seek service if there is smoke, a burning smell, or repeated heat-related shutdown.",
+    "source_organization": "Dell Technologies",
+    "source_title": "How to Stop Computer and Laptop Overheating and Shut Down Issues",
+    "source_url": "https://www.dell.com/support/kbdoc/en-us/000130867/how-to-troubleshoot-a-overheating-shutdown-or-thermal-issue-on-a-dell-pc"
+  },
+  {
+    "id": "fan-idle",
+    "title": "Fan stays loud while the PC is idle",
+    "category": "gaming",
+    "symptoms": [
+      "Fan runs loudly at idle",
+      "Fan runs at high speed even without gaming",
+      "Constant fan noise when no apps are open"
+    ],
+    "possible_causes": [
+      "Background processor load, obstructed vents, or a cooling problem may be keeping the fan active."
+    ],
+    "diagnostic_steps": [
+      "Use Task Manager to see whether CPU load stays unusually high after startup activity settles.",
+      "Check that the outside vents have clearance. If the fan remains loud at low load, consider manufacturer support."
+    ],
+    "safety": "Avoid opening the case or changing fan settings during initial checks.",
+    "source_organization": "Dell Technologies",
+    "source_title": "How to Stop Computer and Laptop Overheating and Shut Down Issues",
+    "source_url": "https://www.dell.com/support/kbdoc/en-us/000130867/how-to-troubleshoot-a-overheating-shutdown-or-thermal-issue-on-a-dell-pc"
+  },
+  {
+    "id": "cpu-temperature-spikes",
+    "title": "Short CPU temperature spikes in games",
+    "category": "gaming",
+    "symptoms": [
+      "Intel CPU temperature briefly spikes during a game",
+      "Temperature jumps during loading and then drops",
+      "CPU gets briefly hot as game load changes"
+    ],
+    "possible_causes": [
+      "Short temperature changes can accompany changes in processor load."
+    ],
+    "diagnostic_steps": [
+      "If a trusted temperature display is already available, compare a brief spike with sustained heat or throttling.",
+      "Use the specific device or processor guidance for interpreting readings."
+    ],
+    "safety": "Avoid a universal temperature cutoff. Stop testing if the PC shuts down or shows signs of physical damage.",
+    "source_organization": "Intel",
+    "source_title": "Seeing Temperature Spikes when Playing Games on Systems with Intel® Core™ Processors",
+    "source_url": "https://www.intel.com/content/www/us/en/support/articles/000035907/processors.html"
+  },
+  {
+    "id": "fps-stutter",
+    "title": "Measure stutter and frame-rate drops",
+    "category": "gaming",
+    "symptoms": [
+      "FPS drops or a game stutters",
+      "Frame rate becomes uneven during gameplay",
+      "Low FPS and stutter on an AMD Radeon GPU"
+    ],
+    "possible_causes": [
+      "Uneven rendering load may show up as changing frame rates or frame times."
+    ],
+    "diagnostic_steps": [
+      "On a supported AMD system with AMD Software already installed, check Performance Metrics during a short repeatable game scene.",
+      "Compare frame rate and stutter in that scene before and after one reversible graphics setting change."
+    ],
+    "safety": "The AMD overlay applies to supported AMD configurations. Avoid long stress tests or logging that captures private on-screen information.",
+    "source_organization": "AMD",
+    "source_title": "Monitor Performance Metrics with AMD Software: Adrenalin Edition",
+    "source_url": "https://www.amd.com/en/resources/support-articles/faqs/DH3-038.html"
+  },
+  {
+    "id": "wrong-gpu",
+    "title": "A game runs on the integrated GPU",
+    "category": "gaming",
+    "symptoms": [
+      "Game uses integrated graphics instead of dedicated GPU",
+      "Windows picked the wrong GPU for a game",
+      "Game uses the power-saving graphics processor"
+    ],
+    "possible_causes": [
+      "On systems with more than one GPU, Windows may select a different graphics preference for that game."
+    ],
+    "diagnostic_steps": [
+      "Check the game’s entry under Settings > System > Display > Graphics.",
+      "If Windows exposes both GPUs, compare the listed preference before deciding whether to change it for that game only."
+    ],
+    "safety": "A high-performance GPU may use more battery power and increase heat. Leave other apps unchanged.",
+    "source_organization": "Microsoft Support",
+    "source_title": "Optimizations for windowed games in Windows 11",
+    "source_url": "https://support.microsoft.com/en-us/windows/hardware/display-graphics/optimizations-for-windowed-games-in-windows-11"
+  }
+]
