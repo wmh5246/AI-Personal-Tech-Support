@@ -54,6 +54,8 @@ class AIServiceTests(unittest.TestCase):
             new_facts=FactUpdates(**{kind: [] for kind in FACT_LABELS}),
             possible_causes=[],
             unresolved_questions=[],
+            citation_ids=[],
+            step=None,
         )
         self.create_response.return_value = SimpleNamespace(status="completed", output_text=update.model_dump_json())
         history = [
@@ -144,6 +146,8 @@ class AIServiceTests(unittest.TestCase):
             "new_facts": {kind: [] for kind in FACT_LABELS},
             "possible_causes": [],
             "unresolved_questions": [],
+            "citation_ids": [],
+            "step": None,
         }
         invalid = [
             "not JSON",
@@ -153,6 +157,7 @@ class AIServiceTests(unittest.TestCase):
             json.dumps({**valid, "reply": " "}),
             json.dumps({**valid, "new_facts": {"symptoms": []}}),
             json.dumps({**valid, "unresolved_questions": "Should be a list"}),
+            json.dumps({**valid, "step": {"title": "Incomplete step"}}),
             json.dumps({**valid, "unexpected": "field"}),
         ]
         for text in invalid:
@@ -162,3 +167,27 @@ class AIServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(AIServiceError, "did not return a usable reply"):
                     get_live_reply(self.settings, self.history, None, self.memory)
                 self.create_response.assert_called_once()
+
+    def test_missing_or_malformed_citation_ids_do_not_discard_the_reply(self):
+        base = {
+            "reply": "Does the sound work in another app?",
+            "detected_category": "audio",
+            "stage": Stage.GATHER,
+            "new_facts": {kind: [] for kind in FACT_LABELS},
+            "possible_causes": [],
+            "unresolved_questions": [],
+            "step": None,
+        }
+        for fields, expected in [
+            ({}, []),
+            ({"citation_ids": "not a list"}, []),
+            ({"citation_ids": [None, 17, "one-app-muted"]}, ["one-app-muted"]),
+        ]:
+            with self.subTest(fields=fields):
+                self.create_response.return_value = SimpleNamespace(
+                    status="completed",
+                    output_text=json.dumps({**base, **fields}),
+                )
+                update = get_live_reply(self.settings, self.history, None, self.memory)
+                self.assertEqual(update.reply, base["reply"])
+                self.assertEqual(update.citation_ids, expected)

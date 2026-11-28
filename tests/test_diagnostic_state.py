@@ -16,10 +16,18 @@ class DiagnosticMemoryTests(unittest.TestCase):
             "The laptop overheats during gaming.": "gaming",
             "My PC has a problem.": None,
             "The Wi-Fi and speakers stopped working.": None,
+            "Windows Update fails with error 0x80070002.": "general",
+            "My printer keeps jamming.": "general",
         }
         for problem, category in examples.items():
             with self.subTest(problem=problem):
                 self.assertEqual(detect_preview_category(problem), category)
+
+    def test_preview_can_change_category_and_keeps_short_follow_ups_in_context(self):
+        self.assertEqual(detect_preview_category("Only this laptop.", "internet"), "internet")
+        self.assertEqual(detect_preview_category("My printer is offline.", "internet"), "general")
+        self.assertIsNone(detect_preview_category("Wi-Fi and my microphone stopped working.", "general"))
+        self.assertEqual(detect_preview_category("I have 250 GB of free storage.", "general"), "general")
 
     def test_only_user_supported_details_are_recorded_and_omissions_keep_old_facts(self):
         original = "On Windows 11 the sound stopped after an update. I rebooted but still have no sound."
@@ -43,6 +51,8 @@ class DiagnosticMemoryTests(unittest.TestCase):
                 PossibleCause(hypothesis="A damaged cable.", evidence="The cable snapped."),
             ],
             unresolved_questions=["Which output device appears in Settings?"],
+            citation_ids=[],
+            step=None,
         )
         memory.apply(update, [original])
         self.assertEqual(memory.original_problem, original)
@@ -84,6 +94,8 @@ class DiagnosticMemoryTests(unittest.TestCase):
             ),
             possible_causes=[],
             unresolved_questions=[],
+            citation_ids=[],
+            step=None,
         )
         memory.apply(update, ["Correction: this is Windows 10."])
         self.assertEqual(memory.facts, {"system_information": ["Windows 10"]})

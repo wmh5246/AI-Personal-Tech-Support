@@ -11,12 +11,14 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from diagnostic_state import Category
+from diagnostic_state import Category, SpecializedCategory
 
 
 DATA_PATH = Path(__file__).with_name("data") / "knowledge_base.json"
 MAX_REFERENCES = 3
 MIN_SIMILARITY = 0.18
+STRONG_DIRECT_SIMILARITY = 0.45
+DISCONFIRMING_SIMILARITY = 0.26
 STOP_WORDS = set(
     "about after all also am an and any are as at be been but by can could did do does for from "
     "get going had has have how in is it just keeps like me my near no not now of on one only or our "
@@ -37,10 +39,35 @@ TERM_ALIASES = {
 FOLLOW_UP = re.compile(
     r"^\s*(?:(?:it|this|that) (?:still|also|keeps|happens|did not|didn't)|"
     r"still (?:happens|the same)|same (?:issue|problem)|no change|nothing changed|"
-    r"(?:only|both) (?:this|the|my|devices?))\b",
+    r"still having|unable to complete|(?:only|both) (?:this|the|my|devices?))\b",
     re.IGNORECASE,
 )
-GENERIC_TERMS = {"app", "call", "connected", "disconnect", "free", "freeze", "space", "update", "slow"}
+CLAUSE_BREAK = re.compile(r"\s+\b(?:and|but)\b\s+|[;\n]|[,.!?](?=\s|$)", re.IGNORECASE)
+FREE_CAPACITY = re.compile(
+    r"\b(\d+(?:\.\d+)?)\s*(gb|tb)\s+(?:of\s+)?(?:(?:disk space|storage)\s+)?(?:free|available)\b",
+    re.IGNORECASE,
+)
+CAPACITY_QUALIFIERS = re.compile(
+    r"\b(?:don't have|do not have|doesn't have|does not have|less than|under|if|had|need|requires?)\b",
+    re.IGNORECASE,
+)
+NO_SPACE_WARNING = re.compile(
+    r"\b(?:plenty of (?:free |available )?(?:disk space|storage|space)|no low (?:disk space|storage) warning)\b",
+    re.IGNORECASE,
+)
+RULED_OUT_CAUSE = re.compile(
+    r"\b(?:I|we) (?:have |already )?ruled out\s+(.+)|"
+    r"^(.+?)\s+(?:isn't|is not|wasn't|was not)\s+(?:the cause|the problem|an issue)\b",
+    re.IGNORECASE,
+)
+CAPACITY_TOPIC = "Low free disk space on the system drive or Windows Update needs more space"
+GENERIC_TERMS = {
+    "app", "available", "call", "connect", "connected", "disk", "disconnect", "drive", "error", "free",
+    "freeze", "gb", "gets", "install", "more", "need", "says", "slow", "space", "storage", "time", "update", "usb",
+}
+SINGLE_TERM_CLUES = {
+    "bluetooth", "ethernet", "fps", "internet", "lowspace", "microphone", "onedrive", "overheat", "sound", "wifi",
+}
 NonemptyText = Annotated[str, Field(min_length=1)]
 TextItems = Annotated[tuple[NonemptyText, ...], Field(min_length=1)]
 
@@ -50,7 +77,7 @@ class KnowledgeDocument(BaseModel):
 
     id: NonemptyText
     title: NonemptyText
-    category: Category
+    category: SpecializedCategory
     symptoms: TextItems
     possible_causes: TextItems
     diagnostic_steps: TextItems
@@ -75,6 +102,11 @@ def _tokens(text: str) -> list[str]:
     text = re.sub(r"\bc\s*:\s*(?:drive\b)?", " cdrive ", text)
     text = re.sub(r"\bc drive\b", "cdrive", text)
     text = re.sub(r"\bframe rates?\b", "fps", text)
+    text = re.sub(
+        r"\b(?:needs? (?:more|additional)|not enough|running out of|low) (?:disk |drive )?(?:space|storage)\b",
+        "lowspace",
+        text,
+    )
     tokens = []
     for term in re.findall(r"[a-z][a-z0-9]+", text):
         if term in STOP_WORDS:
@@ -88,6 +120,30 @@ def _tokens(text: str) -> list[str]:
 
 def _similarity(left: dict[str, float], right: dict[str, float]) -> float:
     return sum(weight * right.get(term, 0) for term, weight in left.items())
+
+
+def _specific_overlap(query: dict[str, float], document: dict[str, float]) -> bool:
+    common = query.keys() & document.keys()
+    return bool(common & SINGLE_TERM_CLUES or (len(common) >= 2 and common - GENERIC_TERMS))
+
+
+def _separate_findings(text: str) -> tuple[list[str], list[str]]:
+    """Keep observations that argue against a cause out of the positive query."""
+    clues, disconfirmed = [], []
+    for clause in CLAUSE_BREAK.split(text):
+        # Ample reported free space lowers relevance for capacity advice. It does not verify the drive.
+        capacity = FREE_CAPACITY.search(clause)
+        ample = capacity and float(capacity[1]) * (1024 if capacity[2].lower() == "tb" else 1) >= 64
+        explicit = NO_SPACE_WARNING.search(clause)
+        observation = (capacity if ample else None) or explicit
+        ruled_out = RULED_OUT_CAUSE.search(clause)
+        if observation and not CAPACITY_QUALIFIERS.search(clause[:observation.start()]):
+            disconfirmed.append(CAPACITY_TOPIC)
+        elif ruled_out:
+            disconfirmed.append(ruled_out[1] or ruled_out[2])
+        elif clause.strip():
+            clues.append(clause)
+    return clues, disconfirmed
 
 
 class KnowledgeBase:
@@ -110,15 +166,16 @@ class KnowledgeBase:
         length = math.sqrt(sum(weight * weight for weight in weights.values()))
         return {term: weight / length for term, weight in weights.items()}
 
-    def _clear_category(self, text: str) -> Category | None:
+    def _clear_category(self, text: str) -> SpecializedCategory | None:
         """Recognize confident categories in separate symptom clauses."""
         query = self._vector(Counter(_tokens(text)))
-        if not query.keys() - GENERIC_TERMS:
-            return None
         scores = {}
         for doc, vector in zip(self.documents, self._vectors, strict=True):
-            score = _similarity(query, vector)
-            scores[doc.category] = max(score, scores.get(doc.category, 0))
+            if _specific_overlap(query, vector):
+                score = _similarity(query, vector)
+                scores[doc.category] = max(score, scores.get(doc.category, 0))
+        if not scores:
+            return None
         ranked = sorted(scores.items(), key=lambda item: -item[1])
         category, best = ranked[0]
         if best >= MIN_SIMILARITY and all(score < 0.76 * best for _, score in ranked[1:]):
@@ -132,30 +189,42 @@ class KnowledgeBase:
         original: str = "",
         category: Category | None = None,
         session_context: tuple[str, ...] = (),
+        findings: tuple[str, ...] = (),
     ) -> tuple[KnowledgeDocument, ...]:
-        if category is None:
-            clauses = re.split(r"\s+\b(?:and|but)\b\s+|[;\n]", latest, flags=re.IGNORECASE)
-            if len(clauses) > 1:
-                detected = {self._clear_category(clause) for clause in clauses} - {None}
-                if len(detected) > 1:
-                    return ()
+        """Rank current evidence, using an explicit category selection only as a preference."""
+        clauses, disconfirmed = _separate_findings(latest)
+        if len(clauses) > 1:
+            detected = {self._clear_category(clause) for clause in clauses} - {None}
+            if len(detected) > 1 and category not in detected:
+                return ()
 
-        newest = self._vector(Counter(_tokens(latest)))
-        context = self._vector(Counter(_tokens(" ".join((original, *session_context)))))
+        retained_clues, retained_disconfirmed = _separate_findings("\n".join((original, *session_context)))
+        for finding in findings:
+            _, rejected = _separate_findings(finding)
+            retained_disconfirmed.extend(rejected)
+        negative_queries = [
+            self._vector(Counter(_tokens(text)))
+            for text in dict.fromkeys((*disconfirmed, *retained_disconfirmed))
+        ]
+        newest = self._vector(Counter(_tokens(" ".join(clauses))))
+        context = self._vector(Counter(_tokens(" ".join(retained_clues))))
         follow_up = bool(original and latest != original and FOLLOW_UP.search(latest))
         scores = []
         for doc, vector in zip(self.documents, self._vectors, strict=True):
             direct = _similarity(newest, vector)
             retained = _similarity(context, vector)
-            specific_match = bool((newest.keys() & vector.keys()) - GENERIC_TERMS)
-            if direct >= MIN_SIMILARITY and (specific_match or retained >= MIN_SIMILARITY):
+            if direct < STRONG_DIRECT_SIMILARITY and any(
+                _similarity(query, vector) >= DISCONFIRMING_SIMILARITY for query in negative_queries
+            ):
+                continue
+            if direct >= MIN_SIMILARITY and _specific_overlap(newest, vector):
                 score = direct + 0.18 * retained
-            elif follow_up and (direct > 0 or not newest) and retained >= MIN_SIMILARITY:
+            elif follow_up and (direct > 0 or not newest) and _specific_overlap(context, vector):
                 score = 0.65 * retained + direct
             else:
                 continue
             if score >= MIN_SIMILARITY:
-                scores.append((score * (1.18 if doc.category == category else 1), doc))
+                scores.append((score * (1.10 if doc.category == category else 1), doc))
 
         scores.sort(key=lambda item: (-item[0], item[1].id))
         if not scores:
@@ -192,12 +261,21 @@ def retrieve_references(
     original: str = "",
     category: Category | None = None,
     session_context: tuple[str, ...] = (),
+    findings: tuple[str, ...] = (),
 ) -> RetrievalResult:
     try:
         index = load_knowledge_base()
     except KnowledgeBaseError:
         return RetrievalResult(available=False)
-    return RetrievalResult(index.search(latest, original=original, category=category, session_context=session_context))
+    return RetrievalResult(index.search(
+        latest, original=original, category=category, session_context=session_context, findings=findings
+    ))
+
+
+def resolve_citations(ids: list[str], retrieved: tuple[KnowledgeDocument, ...]) -> tuple[KnowledgeDocument, ...]:
+    """Resolve only IDs that were supplied for this specific turn."""
+    by_id = {document.id: document for document in retrieved}
+    return tuple(by_id[doc_id] for doc_id in dict.fromkeys(ids) if doc_id in by_id)
 
 
 if __name__ == "__main__":

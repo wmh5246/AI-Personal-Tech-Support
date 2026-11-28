@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import urlparse
 
-from knowledge_base import DATA_PATH, KnowledgeBaseError, load_knowledge_base, retrieve_references
+from knowledge_base import DATA_PATH, KnowledgeBaseError, load_knowledge_base, resolve_citations, retrieve_references
 
 
 class KnowledgeBaseTests(unittest.TestCase):
@@ -73,6 +73,41 @@ class KnowledgeBaseTests(unittest.TestCase):
 
     def test_category_preference_alone_does_not_return_documents(self):
         self.assertEqual(self.index.search("I have a problem.", category="gaming"), ())
+
+    def test_windows_update_error_and_available_space_do_not_retrieve_storage_advice(self):
+        original = "Windows Update fails with error 0x80070002 and will not install."
+        finding = "I have 250 GB of free storage available and have restarted several times."
+        self.assertEqual(self.index.search(original, category="storage"), ())
+        self.assertEqual(self.index.search(finding, original=original, category="storage"), ())
+        self.assertEqual(self.index.search("The Windows Update installation gets stuck."), ())
+        self.assertEqual(self.index.search("A USB printer refuses to print."), ())
+
+    def test_rejected_cause_loses_relevance_on_later_follow_ups(self):
+        original = "Windows Update says it needs more space."
+        self.assertEqual(self.index.search("It still happens.", original=original)[0].id, "update-space")
+        findings = ("I have 250 GB of free storage available.",)
+        self.assertEqual(self.index.search("It still happens.", original=original, findings=findings), ())
+        unconfirmed = ("I do not have 250 GB of free storage available.",)
+        self.assertEqual(
+            self.index.search("It still happens.", original=original, findings=unconfirmed)[0].id,
+            "update-space",
+        )
+        matches = self.index.search(
+            "I have 250 GB free, but my Bluetooth headphones are connected and play no sound.",
+            original=original,
+            findings=findings,
+        )
+        self.assertEqual(matches[0].id, "bluetooth-no-sound")
+        self.assertTrue(all(document.category == "audio" for document in matches))
+
+    def test_only_retrieved_ids_can_supply_citations(self):
+        references = self.index.search("My Bluetooth headphones say connected but I hear no sound.")
+        matches = resolve_citations(
+            ["unknown", "wifi-drops", references[0].id, references[0].id, "https://example.invalid/"],
+            references,
+        )
+        self.assertEqual(matches, references[:1])
+        self.assertEqual(resolve_citations([references[0].id], ()), ())
 
     def test_missing_invalid_and_duplicate_data_are_rejected(self):
         first = json.loads(DATA_PATH.read_text(encoding="utf-8"))[0]

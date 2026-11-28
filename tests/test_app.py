@@ -9,14 +9,21 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 
 from ai_service import AIServiceError, AISettings
-from diagnostic_state import DiagnosticReply, FACT_LABELS, FactUpdates, ReportedFact, Stage
-from knowledge_base import KnowledgeBaseError
+from app import submit_step_feedback
+from diagnostic_state import DiagnosticReply, FACT_LABELS, FactUpdates, GuidedStep, ReportedFact, Stage, StepOutcome
+from knowledge_base import KnowledgeBaseError, load_knowledge_base
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
+SOUND_STEP = GuidedStep(
+    title="Check the active sound output",
+    instructions="Open Windows Sound settings and look for your headphones under Output.",
+    expected="Your headphones appear by name.",
+    safety="Keep the listening volume low before playing a test sound.",
+)
 
 
-def live_response(reply, category=None, stage=Stage.IDENTIFY, facts=None):
+def live_response(reply, category=None, stage=Stage.IDENTIFY, facts=None, *, citation_ids=(), step=None):
     update = DiagnosticReply(
         reply=reply,
         detected_category=category,
@@ -24,6 +31,8 @@ def live_response(reply, category=None, stage=Stage.IDENTIFY, facts=None):
         new_facts=FactUpdates(**{kind: (facts or {}).get(kind, []) for kind in FACT_LABELS}),
         possible_causes=[],
         unresolved_questions=[],
+        citation_ids=list(citation_ids),
+        step=step,
     )
     return SimpleNamespace(status="completed", output_text=update.model_dump_json())
 
@@ -375,3 +384,177 @@ class LiveAppTests(unittest.TestCase):
         self.assertEqual(len(app.chat_message), 4)
         self.assertEqual(len(create_response.call_args.kwargs["input"]), 4)
         self.assertEqual(create_response.call_count, 2)
+
+
+class MilestoneSixAppTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch("ai_service.load_ai_settings", return_value=AISettings(api_key="mock-key")))
+        client = self.enterContext(patch("ai_service.OpenAI"))
+        self.create_response = client.return_value.__enter__.return_value.responses.create
+        self.app = AppTest.from_file(str(APP_PATH)).run()
+
+    def submit(self, text):
+        self.app.chat_input[0].set_value(text).run()
+        self.assertFalse(self.app.exception)
+
+    def assert_category(self, label):
+        self.assertIn(label, [item.value for item in self.app.sidebar.markdown])
+
+    def test_general_troubleshooting_is_distinct_from_ambiguity(self):
+        self.create_response.side_effect = [
+            live_response("What are you seeing?"),
+            live_response("How is the printer connected?", "general", Stage.GATHER),
+        ]
+        self.submit("My PC has a problem.")
+        self.assert_category("None selected")
+        self.assertIn("What are you seeing?", self.app.chat_message[1].text[0].value)
+        self.assertIn("**Problem identification**", [item.value for item in self.app.sidebar.markdown])
+        self.submit("The USB printer refuses to print.")
+        self.assert_category("General Troubleshooting")
+        self.assertIn("**Gathering diagnostic information**", [item.value for item in self.app.sidebar.markdown])
+        self.assertIn("Search completed. No relevant entries found.", [item.value for item in self.app.sidebar.caption])
+        self.assertEqual(len([button for button in self.app.button if button.key.startswith("category-")]), 5)
+        self.assertEqual(self.create_response.call_count, 2)
+
+    def test_windows_update_reclassifies_after_free_space_and_restarts_are_reported(self):
+        original = "Windows Update fails with error 0x80070002 and will not install."
+        update = "I have 250 GB of free storage available and have restarted several times."
+        # Simulate the earlier model classification to check that it cannot anchor the next turn.
+        self.create_response.side_effect = [
+            live_response("What does Windows show for free space?", "storage", Stage.GATHER),
+            live_response(
+                "Which update failed in Windows Update history?",
+                "general",
+                Stage.EVALUATE,
+                {"reported_results": [ReportedFact(quote="250 GB of free storage", replaces=None)]},
+                citation_ids=["update-space"],
+            ),
+        ]
+        self.submit(original)
+        self.assert_category("Storage")
+        self.assertFalse(self.app.session_state.last_retrieval.documents)
+        self.submit(update)
+        self.assert_category("General Troubleshooting")
+        self.assertFalse(self.app.session_state.last_retrieval.documents)
+        self.assertFalse(self.app.get("link_button"))
+        request = self.create_response.call_args.kwargs
+        self.assertEqual(request["input"][-1]["content"], update)
+        self.assertIn(original, request["input"][0]["content"])
+        self.assertFalse(any("Retrieved troubleshooting references" in item["content"] for item in request["input"]))
+        self.assertEqual(self.create_response.call_count, 2)
+
+    def test_manual_override_stays_selected_during_automatic_reclassification(self):
+        self.create_response.side_effect = [
+            live_response("When does the sound stop?", "audio", Stage.GATHER),
+            live_response("Which update failed?", "general", Stage.GATHER),
+        ]
+        self.submit("My headphones have no sound.")
+        self.app.button(key="category-audio").click().run()
+        self.submit("The sound is back. What I want to look at now is a failed Windows update.")
+        self.assert_category("Audio & Drivers")
+        self.assertIn("Auto-detected: General Troubleshooting", [item.value for item in self.app.sidebar.caption])
+        self.assertIn("Manually selected category: Audio & Drivers.", self.create_response.call_args.kwargs["instructions"])
+        self.app.button(key="auto-category").click().run()
+        self.assert_category("General Troubleshooting")
+        self.assertEqual(self.create_response.call_count, 2)
+
+    def test_only_valid_citations_render_and_they_stay_with_their_reply(self):
+        self.create_response.side_effect = [
+            live_response(
+                "Windows may be using another output.",
+                "audio",
+                Stage.GUIDE,
+                citation_ids=["fake", "bluetooth-no-sound", "wifi-drops", "bluetooth-no-sound"],
+                step=SOUND_STEP,
+            ),
+            live_response("What does the printer screen show?", "general", Stage.GATHER, citation_ids=["bluetooth-no-sound"]),
+        ]
+        self.submit("My Bluetooth headphones say connected but I hear no sound.")
+        expected_source = next(doc for doc in load_knowledge_base().documents if doc.id == "bluetooth-no-sound")
+        links = self.app.chat_message[1].get("link_button")
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].proto.url, expected_source.source_url)
+        self.assertEqual(links[0].proto.label, f"[1] {expected_source.source_title} · {expected_source.source_organization}")
+        self.assertIn("Sources cited for this reply", [item.value for item in self.app.chat_message[1].caption])
+        for text in (SOUND_STEP.title, SOUND_STEP.instructions, SOUND_STEP.expected, SOUND_STEP.safety):
+            self.assertIn(text, [item.value for item in self.app.chat_message[1].text])
+
+        self.submit("The printer keeps jamming.")
+        self.assertEqual(len(self.app.chat_message[1].get("link_button")), 1)
+        self.assertEqual(len(self.app.get("link_button")), 1)
+        self.assertFalse(self.app.chat_message[3].get("link_button"))
+        self.assertTrue(any("General AI guidance" in item.value for item in self.app.chat_message[3].caption))
+        self.assertIsNone(self.app.session_state.active_step)
+        self.app.button(key="new-session").click().run()
+        self.assertFalse(self.app.get("link_button"))
+        self.assertIsNone(self.app.session_state.last_retrieval)
+
+    def test_outcome_controls_record_user_feedback_and_only_send_once_per_step(self):
+        for outcome in StepOutcome:
+            with self.subTest(outcome=outcome):
+                self.app.button(key="new-session").click().run()
+                self.create_response.reset_mock()
+                next_step = SOUND_STEP.model_copy(update={"title": "Check the app volume"})
+                self.create_response.side_effect = [
+                    live_response("Let's check the output.", "audio", Stage.GUIDE, step=SOUND_STEP),
+                    live_response("Thanks for your result.", "audio", Stage.GUIDE, step=next_step),
+                ]
+                self.submit("My headphones have no sound.")
+                self.assertIn("Current step", [item.value for item in self.app.sidebar.caption])
+                self.app.text_input(key="step-details-1").set_value("The output list was visible.")
+                self.app.button(key=f"step-feedback-1-{outcome.name}").click().run()
+                self.assertFalse(self.app.exception)
+                self.assertEqual(self.create_response.call_count, 2)
+                history = self.app.session_state.diagnostics["live"].step_history
+                self.assertEqual(len(history), 1)
+                self.assertEqual(history[0].title, SOUND_STEP.title)
+                self.assertEqual(history[0].outcome, outcome)
+                self.assertEqual(history[0].details, "The output list was visible.")
+                self.assertIn(
+                    f"Reported outcome · {outcome.value}",
+                    [item.value for item in self.app.chat_message[1].caption],
+                )
+                request = self.create_response.call_args.kwargs["input"]
+                notes = json.loads(request[0]["content"].split("\n", 1)[1])
+                self.assertEqual(notes["step_history"][0]["outcome"], outcome.value)
+                self.assertIn("The output list was visible.", request[-1]["content"])
+                # AppTest removes stale widgets. Invoke their callback against the current state.
+                with patch("app.st.session_state", self.app.session_state):
+                    submit_step_feedback(1, outcome)
+                self.app.run()
+                self.assertFalse(self.app.exception)
+                self.assertEqual(self.create_response.call_count, 2)
+                if outcome == StepOutcome.SOLVED:
+                    self.assertIsNone(self.app.session_state.active_step)
+                    self.assertEqual(self.app.session_state.diagnostics["live"].stage, Stage.RESOLVE)
+                    self.assertFalse(self.app.text_input)
+                else:
+                    self.assertEqual(self.app.session_state.active_step, 3)
+                    self.assertEqual(self.app.text_input[0].key, "step-details-3")
+
+        self.app.button(key="new-session").click().run()
+        self.assertFalse(self.app.chat_message)
+        self.assertIsNone(self.app.session_state.active_step)
+        self.assertEqual(self.app.session_state.diagnostics["live"].step_history, [])
+
+    def test_preview_hides_live_controls_and_api_failure_preserves_feedback(self):
+        self.create_response.side_effect = [
+            live_response("Let's check the output.", "audio", Stage.GUIDE, step=SOUND_STEP),
+            RuntimeError("private request error"),
+        ]
+        self.submit("My headphones have no sound.")
+        self.app.toggle(key="preview_mode").set_value(True).run()
+        self.assertFalse(self.app.text_input)
+        self.submit("Windows Update error 0x80070002.")
+        self.assert_category("General Troubleshooting")
+        self.assertEqual(self.create_response.call_count, 1)
+        self.app.toggle(key="preview_mode").set_value(False).run()
+        self.app.button(key="step-feedback-1-UNABLE").click().run()
+        self.assertFalse(self.app.exception)
+        self.assertIn("did not return a usable reply", self.app.error[0].value)
+        self.assertNotIn("private request error", self.app.error[0].value)
+        self.assertIsNone(self.app.session_state.active_step)
+        feedback = self.app.session_state.diagnostics["live"].step_history
+        self.assertEqual([item.outcome for item in feedback], [StepOutcome.UNABLE])
+        self.app.run()
+        self.assertEqual(self.create_response.call_count, 2)

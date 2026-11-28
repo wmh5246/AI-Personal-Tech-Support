@@ -4,10 +4,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-Category = Literal["internet", "performance", "storage", "audio", "gaming"]
+SpecializedCategory = Literal["internet", "performance", "storage", "audio", "gaming"]
+Category = Literal[SpecializedCategory, "general"]
 FactKind = Literal["system_information", "symptoms", "recent_changes", "attempted_steps", "reported_results"]
 
 FACT_LABELS: dict[FactKind, str] = {
@@ -51,6 +52,29 @@ class PossibleCause(BaseModel):
     evidence: str
 
 
+class GuidedStep(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    title: str
+    instructions: str
+    expected: str = Field(description="What to look for or what should happen, without promising a fix.")
+    safety: str | None = Field(description="Necessary warnings, prerequisites, or a safer alternative, or null.")
+
+
+class StepOutcome(StrEnum):
+    SOLVED = "Problem solved"
+    STILL_A_PROBLEM = "Still having the problem"
+    UNABLE = "Unable to complete this step"
+
+
+@dataclass(frozen=True)
+class StepFeedback:
+    title: str
+    instructions: str
+    outcome: StepOutcome
+    details: str
+
+
 class DiagnosticReply(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -60,6 +84,17 @@ class DiagnosticReply(BaseModel):
     new_facts: FactUpdates
     possible_causes: list[PossibleCause]
     unresolved_questions: list[str]
+    citation_ids: list[str] = Field(description="IDs of supplied references actually used to support this reply.")
+    step: GuidedStep | None = Field(description="One manual troubleshooting action, or null if none is recommended.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def ignore_unusable_citations(cls, data):
+        """A missing or malformed citation field should not discard otherwise usable guidance."""
+        if not isinstance(data, dict):
+            return data
+        ids = data.get("citation_ids")
+        return {**data, "citation_ids": [item for item in ids if isinstance(item, str)] if isinstance(ids, list) else []}
 
 
 @dataclass
@@ -70,6 +105,7 @@ class DiagnosticMemory:
     facts: dict[FactKind, list[str]] = field(default_factory=dict)
     possible_causes: list[str] = field(default_factory=list)
     unresolved_questions: list[str] = field(default_factory=list)
+    step_history: list[StepFeedback] = field(default_factory=list)
 
     def apply(self, reply: DiagnosticReply, user_reports: list[str]) -> None:
         """Apply one valid turn, keeping reported details until an explicit correction."""

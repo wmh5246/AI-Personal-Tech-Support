@@ -8,21 +8,23 @@ Reproduce a structured help desk experience through conversational diagnostic qu
 
 Use these capabilities to distinguish the prototype from general-purpose chatbots, Windows Agent in Settings, manufacturer-specific support apps, and enterprise IT support platforms. Keep the scope feasible for one student in one semester. Avoid claims of being the first AI troubleshooting agent or outperforming commercial enterprise products.
 
+Prioritize application stability, simplicity, maintainability, and reproducibility when making scope and implementation decisions. Account registration, authentication, cloud synchronization, automatic system repairs, and standalone desktop packaging are outside the current project scope.
+
 ## Technology choices
 
-- Use Python as the primary language and Streamlit for the local browser interface.
+- Retain the existing Python and Streamlit architecture for the local browser application.
 - Use the OpenAI API for language model capabilities and tool calling.
-- Use ChromaDB or a lightweight equivalent for retrieval-augmented generation (RAG).
+- Retain the local TF-IDF retrieval implementation for retrieval-augmented generation (RAG). Introduce ChromaDB or embedding models only when a demonstrated requirement justifies the change.
 - Prefer Python's standard library and lightweight packages for local diagnostics.
 - Use Git and GitHub for version control and Pytest or a suitable lightweight testing tool.
-- Target local execution on Windows. Favor simple, reliable implementations and add frameworks only when they provide a clear benefit.
+- Target local execution on Windows. Favor simple, reliable implementations and avoid major architectural changes and unnecessary dependencies.
 
 ## Product requirements
 
 Implement these capabilities incrementally in the milestone order below.
 
 1. Accept natural-language descriptions of computer problems.
-2. Provide quick starts for the five supported troubleshooting categories.
+2. Provide quick starts for the five specialized troubleshooting categories and support General Troubleshooting for other Windows issues.
 3. Ask relevant diagnostic follow-up questions in conversation.
 4. Retain conversation context within the current session.
 5. Retrieve relevant technical documentation through RAG.
@@ -32,8 +34,9 @@ Implement these capabilities incrementally in the milestone order below.
 9. Produce troubleshooting session summaries.
 10. Recommend safe escalation when a problem remains unresolved.
 11. Let users start and reset troubleshooting sessions.
+12. Allow optional local chat history in SQLite, with controls to view, resume, and delete saved sessions.
 
-### Initial troubleshooting categories
+### Specialized knowledge base categories
 
 - Internet and Wi-Fi connectivity
 - Slow PC performance
@@ -41,7 +44,7 @@ Implement these capabilities incrementally in the milestone order below.
 - Audio and driver issues
 - Overheating and gaming performance
 
-Implement and test all five categories before considering expansion. Get the project owner's approval for scope changes or unrelated features.
+Support all five specialized categories and use General Troubleshooting for Windows issues outside them or when a specialized category is unclear. Allow automatically selected categories to change as new evidence becomes available. Get the project owner's approval for additional scope changes or unrelated features.
 
 ## Agent workflow and diagnostic tools
 
@@ -73,6 +76,7 @@ Implement and test all five categories before considering expansion. Get the pro
 - Respect source usage permissions. Store original summaries, permitted excerpts where appropriate, and source metadata. Include the title, source URL, troubleshooting category, and relevant content for each entry.
 - Retrieve relevant documentation before generating technical recommendations. Display citations only for sources actually retrieved for the recommendation.
 - Communicate uncertainty when retrieval finds no relevant documentation. Never invent sources.
+- Reassess retrieval relevance when new evidence rules out a suspected cause. Use the Windows Update case documented in the README to investigate category anchoring and keyword overlap during Milestone 6.
 - Include the knowledge base resources or the steps needed to rebuild it on another computer.
 
 ## Interface
@@ -80,7 +84,7 @@ Implement and test all five categories before considering expansion. Get the pro
 Use a clean, professional dark theme inspired by the paper demo, with a dark navy background and blue or cyan accents. Use language ordinary Windows users can understand. Prioritize usability and functional reliability when adapting the demo.
 
 - Show the application title, a brief introduction, and a natural-language problem input.
-- Provide quick starts for all five troubleshooting categories.
+- Provide quick starts for all five specialized categories and offer General Troubleshooting.
 - Display the chat conversation and current troubleshooting status.
 - Make diagnostic tool usage, relevant results, guided steps, and supporting sources easy to find.
 - Show the resolution or escalation summary and provide controls to start or reset a session.
@@ -91,6 +95,7 @@ Use a clean, professional dark theme inspired by the paper demo, with a dark nav
 - Keep diagnostic tools read-only and avoid collecting unnecessary personal or sensitive information.
 - Never automatically change Windows settings or install or uninstall drivers or applications. Never delete user files or modify the Windows registry, BIOS, or disk partitions.
 - Keep API credentials outside source code and never commit keys or other secrets to GitHub.
+- Let users choose whether to save chat history locally. Limit the history deletion control to saved records managed by the application, and exclude local database files from Git.
 - Clearly distinguish observed facts from suspected causes. Prefer low-risk recommendations and suggest professional technical support when appropriate.
 - Leave actions that modify the computer under the user's control.
 
@@ -115,20 +120,31 @@ Treat reproducibility as a mandatory academic requirement. The professor or teac
 3. Diagnostic conversation behavior.
 4. Conversation memory.
 5. RAG knowledge base and retrieval.
-6. Source citations and guided troubleshooting.
-7. First agentic diagnostic tool and tool-calling loop.
-8. Additional diagnostic tools and AI tool selection.
-9. Troubleshooting session report and escalation.
-10. Integration testing, bug fixes, documentation, and UI refinement.
+6. Source citations, interactive troubleshooting steps, the General Troubleshooting category, dynamic reclassification, and improved retrieval relevance.
+7. First AI-selected, consent-based, read-only local diagnostic tool.
+8. Additional read-only diagnostic tools.
+9. Session reports, escalation guidance, and basic optional local chat history using SQLite. Support viewing, resuming, and deleting saved sessions, and exclude local database files from Git. Prioritize reports and escalation if persistent history threatens application stability.
+10. Comprehensive testing, security review, bug fixes, and reproducibility on a separate Windows computer.
 
 Complete and verify each milestone before moving on. After reporting the milestone, wait for the project owner's approval before proceeding to the next one. Obtain the owner's approval before committing or pushing changes.
+
+### Release checkpoints
+
+Keep existing release tags on their approved commits and retain these release checkpoints.
+
+| Tag | Checkpoint |
+| --- | --- |
+| `v1.0` | Initial implementation |
+| `v2.0` | Partial enhancement |
+| `v3.0` | Full enhancement |
+| `v3.1` | Testing and validation |
 
 ## Final prototype acceptance targets
 
 These are targets to verify during evaluation.
 
 - Launch successfully on a separate Windows computer using the documented instructions.
-- Support all five defined categories and conduct meaningful diagnostic conversations.
+- Support all five specialized categories and General Troubleshooting, and conduct meaningful diagnostic conversations.
 - Retrieve relevant technical documentation and display supporting sources.
 - Provide safe, actionable troubleshooting guidance.
 - Demonstrate at least one real diagnostic tool selected by the AI. Implement additional tools if feasible.

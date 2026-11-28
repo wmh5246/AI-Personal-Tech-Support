@@ -32,30 +32,45 @@ QUICK_STARTS = {
     },
 }
 
+CATEGORY_LABELS = {key: topic["label"] for key, topic in QUICK_STARTS.items()} | {"general": "General Troubleshooting"}
+GENERAL_QUESTION = "What are you trying to do, and what message or behavior do you see instead?"
 
 PREVIEW_CATEGORY_HINTS = {
     "internet": r"wi[ -]?fi|wireless network|internet|router|ethernet",
     "performance": r"slow(?:er|down)?|sluggish|freez(?:e|es|ing)|takes a long time",
-    "storage": r"storage|disk space|drive (?:is )?full|c: drive",
+    "storage": r"low (?:disk space|storage)|running out of (?:disk space|storage)|(?:drive|storage) (?:is )?(?:almost )?full|needs? more space",
     "audio": r"audio|no sound|lost sound|microphone|headphones|speakers?",
     "gaming": r"overheat(?:s|ing)?|too hot|gaming|(?:low|drops? in) fps",
 }
 
+PREVIEW_GENERAL_ISSUES = re.compile(
+    r"\b(?:windows updates?.*\b(?:error|fail\w*|stuck|won't install)|"
+    r"printer\b.*\b(?:jam\w*|offline|won't print)|blue screen|"
+    r"(?:can't|cannot) (?:start windows|sign in to windows))\b",
+    re.IGNORECASE,
+)
 
-def detect_preview_category(problem: str) -> Category | None:
+
+def detect_preview_category(problem: str, previous: Category | None = None) -> Category | None:
     """Give the offline preview a category only when one set of hints matches."""
     matches = [
         category
         for category, hints in PREVIEW_CATEGORY_HINTS.items()
         if re.search(rf"\b(?:{hints})\b", problem, re.IGNORECASE)
     ]
-    return matches[0] if len(matches) == 1 else None
+    if matches:
+        return matches[0] if len(matches) == 1 else None
+    if PREVIEW_GENERAL_ISSUES.search(problem):
+        return "general"
+    return previous
 
 
-def placeholder_reply(category: str | None, first_message: bool) -> str:
+def placeholder_reply(category: Category | None, first_message: bool) -> str:
     """Return a fixed example without analyzing the user's message."""
     if not first_message:
         return "Your update is in the conversation. This preview stops at recording details."
+    if category == "general":
+        return GENERAL_QUESTION
     if category is not None:
         return QUICK_STARTS[category]["question"]
     return "When did the problem start, and what were you doing when you first noticed it?"
